@@ -1,0 +1,321 @@
+# ============================================================================
+# Data Agent 配置
+# 原则：所有"可调的东西"都在这里，代码里不写死。
+# 密码一律走环境变量（见同目录 .env，已加入 .gitignore）。
+# ============================================================================
+version: 1
+updated: "2026-11-09"
+
+# ---------------------------------------------------------------- 执行面
+# 唯一入口：连接建立后立刻 SWITCH hive_catalog + USE music_dw，
+# 之后这条会话上的所有 SQL 都用裸表名。换库只改这里，
+# 绕过它写的 SQL（如 internal.xxx）由护栏 R17 拦住。
+execution:
+  catalog: hive_catalog
+  database: music_dw
+  init_sql:
+    - "SWITCH hive_catalog"
+    - "USE music_dw"
+  host: "192.168.128.163"
+  port: 9030
+  user: "agent_ro"              # GRANT SELECT_PRIV ON hive_catalog.music_dw.*
+  password_env: "DORIS_RO_PASSWORD"
+  charset: "utf8mb4"
+  connect_timeout: 10
+  read_timeout: 60
+
+# ---------------------------------------------------------------- 运行时限制
+limits:
+  max_rows: 5000            # 结果超过即截断，并在答案里标注
+  max_attempts: 3           # 校验不过 → 重生成，最多几轮
+  shape_retries: 1          # 答案形状不符 → 返工几轮。刻意只给 1：形态问题
+                            # 返工一次不成，多半是问题本身不适合这批数据，
+                            # 再试三轮只是把成本翻三倍。
+  timeout_sec: 60
+  # 连接池上限。单机演示里 6 路并发就够，再大只会把 FE 的连接额度
+  # 和 HMS 连接一起顶上去（实测并发评测时撞过 `1203 Reach limit of connections`）。
+  pool_size: 3
+
+# ---------------------------------------------------------------- 答案可信度
+# 四项结果自检 + 链路信号 → 高/中/低。规则判、不调模型，每条理由可指认。
+# 量级自检要**多跑一次 SQL**（同 SQL 换到上一窗口），不想要这份代价就关掉它——
+# 关掉只影响 magnitude 这一项，其余三项与链路信号照常。
+trust:
+  enabled: true
+  magnitude:
+    enabled: true
+    # 阈值为什么是 5 而不是 10：实测把某指标人为放大 10 倍，因为相邻两天本身
+    # 有 1% 波动，算出来是 9.92 倍——用 10 当门槛正好漏掉，验收条件过不了。
+    # 正常日间波动在 1.2 倍以内，5 倍留足余量又不至于天天报警。
+    ratio: 5.0           # 当前值达到上一窗口的 5 倍以上 → 判量级异常
+    ratio_down: 0.2      # 跌到 1/5 以下同样异常（断供、分区丢失的典型形态）
+    # 比率类指标（完播率 0.51、ARPU 7.47）也在自检范围内，所以下限不能定成 1.0——
+    # 那会把 0.51 判成"太小不判"，而 0.51 掉到 0.05 恰恰是最该报的。
+    # 改为「比值 + 绝对差」双条件：比值超标且绝对差够大才报，噪声进不来。
+    min_base: 0.001      # 基线小于它不判比值（0 附近除法无意义）
+    min_delta: 0.01      # 绝对值变化小于它不报：避免 0.5143 vs 0.5147 这类抖动
+  dominance:
+    share: 0.95          # 多行结果里单行占合计 95% 以上 → 提示维度可能没拆开
+  degrade:
+    repair_rounds: 2     # 返工 ≥2 轮才通过 → 可信度最高只能到中
+
+# ---------------------------------------------------------------- 元问题
+# 「你能做什么 / DAU 是什么 / 帮我用 tensorflow」不该走 SQL 生成链路。
+# 前两类查语义层直接答，第三类交给 LLM 但显式标注「未查询数仓」——
+# 不把通用知识伪装成项目数据，也不为了回答「你是谁」去编一条 SELECT。
+meta:
+  allow_general_chat: true
+  general_chat_max_tokens: 400
+
+# ---------------------------------------------------------------- 治理面（阶段 1）
+# PostgreSQL 存审计 / 账号 / 策略 / 会话 / 成本台账（ADR-003）。
+# 默认连本机开发实例；生产用 GOV_PG_DSN 覆盖，配置里不放密码。
+governance:
+  dsn_env: "GOV_PG_DSN"
+  dsn: "postgresql://postgres@127.0.0.1:55432/agent_gov"
+  # 审计保留期（AC-14）。qa_logs 有不可变触发器，清理只能走
+  # governance/retention.py：先整行归档到 qa_logs_archive，再在同一个事务里
+  # 临时禁用触发器删除。超过这个天数的行才会被归档+删除。
+  retention_days: 180
+
+security:
+  rate_limit_per_min: 20        # 每用户每分钟问数次数
+  session_ttl_min: 480
+  login_fail_limit_per_min: 5
+  max_concurrent_ask: 8         # 同时在跑的问答上限（异步信号量）
+  ask_timeout_sec: 300          # 单次问答的硬超时，超了给明确错误而不是挂住
+
+# ---------------------------------------------------------------- 失败案例库
+# 从 qa_logs 抽出来的「同类问题以前踩过的坑」，只在**修复路径**注入（首次生成不注入，
+# 否则等于提前告诉模型会在哪儿错，128 题基线就不干净了）。
+# 文件由 `python failcase.py --build` 重建；这里关掉不影响问数，只是少了历史案例。
+failcase:
+  enabled: true
+  top_k: 2                      # 最多注入 2 条，多了会挤掉语义层上下文
+  path: "failcases.json"
+
+# ---------------------------------------------------------------- 语义层
+semantic:
+  tables_json: "agent/tables.json"
+  metrics_yaml: "agent/semantic/metrics.yaml"
+  dimensions_yaml: "agent/semantic/dimensions.yaml"
+  glossary_yaml: "agent/semantic/glossary.yaml"
+
+# ---------------------------------------------------------------- 护栏
+guard:
+  script: "agent/guards/guard.py"
+  mode: "query"             # query = 问数场景（比 dev 严）
+  strict_warn: false        # true 则 WARN 也当拒绝
+  # 常驻护栏进程（阶段 4）。一次 subprocess 调用的成本 ≈ 0.2s 解释器 +
+  # 0.2s sqlglot import + 30ms 实际检查；并发时这三块会把 P95 顶到 3s。
+  # 常驻后只剩解析成本，规则实现仍是同一份 guard.py。
+  serve: true
+  workers: 3                # 与 limits.pool_size 对齐：再多也堵在数据库连接上
+  acquire_timeout: 10       # 池满时最多等多久，超时降级为一次性 subprocess
+  call_timeout: 60
+
+# ---------------------------------------------------------------- 生成器
+generator:
+  mode: "llm"               # stub | llm
+                            #   stub = A 阶段，返回固定 SQL，只验证管道
+                            #   llm  = B/C 阶段，接 DeepSeek 真生成 + 失败重写
+  model: "deepseek-chat"
+  base_url: "https://api.deepseek.com"
+  api_key_env: "LLM_API_KEY"
+  temperature: 0            # 问数场景必须为 0：同一问题要能复现同一版 SQL
+  max_tokens: 2000
+  timeout_sec: 120          # 只读超时；连接超时在 llm.py 里固定 10s
+  # 整通调用的总预算（含重试）。read 超时只算"两次读之间"的间隔，
+  # 服务端慢速吐字节能把它拖到十分钟——实测撞到过一次 607 秒的 generate。
+  total_budget_sec: 240     # 超了主动断开，让 repair 流程接手，而不是干等
+
+# ---------------------------------------------------------------- 修复策略
+# 顺序固定：先机械照 fix 改（免费），不行再让模型重写（花钱）。
+# 这两级都在 node_generate._repair 里，不用配开关——关掉机械修复没有好处。
+repair:
+  mechanical_first: true    # false 只用于对比实验，正常别关
+  log_prompt_tokens: true   # trace 里打印 token 数，方便估算成本
+
+# ---------------------------------------------------------------- 成本单价
+# 按「每百万 token」存，换算只在 governance/contracts._cost_cny 里做一次。
+# 换模型 / 供应商调价只改这里；缺省不填则成本记 0（不猜价格）。
+# 下面的数字是 deepseek-chat 的公开标价，换模型务必同步改。
+cost:
+  currency: CNY
+  price_in_per_mtok: 2.0
+  price_out_per_mtok: 8.0
+
+# ---------------------------------------------------------------- 模型网关（阶段 7 / AC-18）
+# 所有模型调用的唯一出口：预算、限流、台账、出网四件事都在 gateway.py 里做。
+# 台账写 cost_ledger（不可变），出网由 egress.py 在 socket 层兜底。
+gateway:
+  max_calls_per_min: 60      # 每用户每分钟模型调用上限，0 = 不限。
+                             # 别照抄 security.rate_limit_per_min=20：那是"问数"次数，
+                             # 一次问数可能调 2~3 次模型（生成 / 修复 / 元问题）。
+  daily_cost_cny: 20.0       # 每用户每天成本上限（元），0 = 不限。
+                             # 演示与全量评测都够用；生产按团队预算改，别照抄。
+
+
+# ---------------------------------------------------------------- 成本闸（阶段 8 / AC-17）
+# 护栏 R6 只看"WHERE 里有没有 dt"，挡不住 `dt <> '1900-01-01'` 这类
+# "写了 dt 但裁不掉分区"的写法。成本闸用 EXPLAIN 的真计划判：
+#   全部分区都要扫 + 表够大 → 拒；或 预计扫描量超绝对上限 → 拒。
+# 阈值按"业务上合理"定，不是按机器跑得动定：近 30 天扫 30/35 个分区是需求，
+# 全表 35/35 才是实现问题。
+cost_gate:
+  enabled: true
+  min_large_rows: 1000000        # 大表门槛：全分区扫描超过这个行数才判。
+                                 # 500 万的 ods_music_event 全扫会被拦；
+                                 # 44 万的 dwd_play_start 全扫不拦（不值得为它拦）。
+  max_scan_rows: 20000000        # 绝对上限：任何情况预计超过就拒（兜住笛卡尔积放大）
+  max_scan_bytes: 268435456      # 256MB，压缩后字节数，按 Doris 报的 totalFileSize
+
+# ---------------------------------------------------------------- 答案缓存（阶段 4）
+# 同一个问题 + 同一个身份 + 同一份语义层 → 第二次问 0 token / 0 查询。
+# key 里含 policy_hash 与语义层文件指纹，所以换口径、改权限都会自动失效；
+# eval / cli 不读不写（会让成本与稳定性统计失真）。
+cache:
+  enabled: true
+  # local = 进程内（单实例演示）；redis = 跨实例共享（AC-17）。
+  # 后端连不上会自动回落 local，并在 /api/cache 里标 degraded —— 不静默降级：
+  # "以为共享了其实各存一份"在演示时完全看不出来，在生产上是缓存穿透。
+  backend: "redis"
+  ttl_sec: 21600          # 6 小时。数据是 T+1 冻结的，TTL 主要防"改了 SQL 忘重启"
+  maxsize: 512            # local 后端的 LRU 容量；redis 后端交给 maxmemory 策略
+  redis:
+    host: "127.0.0.1"
+    port: 6379
+    db: 0
+    # 项目自带 Redis（third_party/redis-win64），webapp 启动时若发现没在跑会自动拉起。
+    # 谁的环境里 6379 被占了，用 REDIS_HOST/REDIS_PORT/REDIS_DB 覆盖，不必改本文件。
+    autostart: true
+    password_env: "REDIS_PASSWORD"   # 密码不写进配置文件
+    pool: 4
+    timeout: 2.0
+    prefix: "agc"                    # key 前缀，避免和别的业务撞库
+    env: "dev"                       # 多环境共用一套 Redis 时用这个隔离
+    single_flight_wait_sec: 25       # 等别人算完的上限，超时自己算（绝不阻塞）
+    single_flight_poll_ms: 100
+    lock_ttl_ms: 40000               # 锁过期时间，防持锁实例崩掉后死等
+
+# ---------------------------------------------------------------- 时钟
+# 时间解析用「固定今天」还是「真实今天」。本项目数据是冻结的造数数据
+# （10-05 ~ 11-08），用真实时钟只会让「昨天」逐日漂出数据范围、越跑越不可用。
+# 默认 fixed 保证演示与评测可复现；真接上实时链路后切 real 即可，
+# timeparse.clocks() 两种都支持，P1-10 的 lag 比较逻辑不依赖哪个模式。
+# 注意：fixed_today 要和 lane.offline.data_until 一起改。
+clock:
+  mode: "fixed"               # fixed | real
+  fixed_today: "2026-11-09"
+
+# ---------------------------------------------------------------- 检索（D 阶段）
+retrieval:
+  # hybrid 是 2026-11-15 起的主链路：115 题检索 A/B 上 BM25 28.7% →
+  # Hybrid(LSA) 47.8% → Hybrid(BGE神经) 49.6%（MRR 0.193→0.338→0.370）。
+  # 代价 0.51 → 7.83 ms/题，相对整题 4~5 秒可忽略。评测见 eval/retrieval_ab_20261115.json。
+  backend: "hybrid"           # bm25 | legacy | hybrid（hybrid = BM25 ∪ 稠密 + rerank）
+  top_tables: 4
+  top_metrics: 3
+  min_score: 0.5              # 低于此分不进 prompt，避免硬塞无关表
+  min_metric_score: 50.0      # 已有 glossary 精确命中时，BM25 补充的最低分
+  fallback_metric_score: 35.0 # 一条都没命中时放宽，保证还有候选
+  # 表名/中文名等结构化字段的加权，见 retrieval.py 的 _W_* 常量
+
+  # ---- 混合检索（vecindex.py）
+  # hybrid_enabled 控制 vecindex.hybrid_search 内部是否做双路融合；
+  # 主链路的开关是上面的 backend（backend=bm25 时这段不生效）。
+  hybrid_enabled: true
+  dense_dim: 128              # LSA 后端专用：SVD 投影维度
+  dense_alpha: 0.3            # 稠密权重；0=纯 BM25，1=纯稠密。0.3 是消融最优
+
+  # ---- 稠密后端（2026-11-15 主链路已切到 neural）
+  # lsa    = TF-IDF+SVD 矩阵分解，零依赖，115 题 A/B 混合后 R@4 47.8%
+  # neural = BGE 中文小模型 ONNX 神经 embedding + 余弦向量索引（与业界对齐），
+  #          混合后 R@4 49.6% / MRR 0.370；建索引 1.5s、查询 8ms
+  # 回退：把 backend 改回 "bm25"、dense_backend 改回 "lsa"（备份见
+  #      bak_20261114_caliber/config_before_neural.yaml）
+  dense_backend: "neural"     # lsa | neural
+  neural_model_dir: "third_party/embedding_models/bge-small-zh-v1.5"
+  neural_max_len: 96
+
+# ---------------------------------------------------------------- 提示词能力
+# 三项默认全关：128 题基线是在"全关"下跑出来的，改默认值等于偷偷改基线。
+# 每项都要先用 eval/prompt_ab.py 做 A/B，确认不退化再开。
+prompt:
+  cot: false                  # 结构化 plan 字段：先列口径/表/过滤，再写 SQL
+  fewshot:
+    enabled: false
+    top: 2                    # 最多 2 条，示例占的是上下文预算
+    min_score: 2.0            # 低于此分不给示例——给错的比不给更糟
+    include_qa_logs: true     # 线上真实问答也入库（PG 不可用时自动跳过）
+    max_pool: 200
+    qa_logs_limit: 300
+  self_consistency:
+    enabled: false
+    samples: 3                # 采样次数；成本 = n 倍
+    temperature: 0.7          # 多采样必须抬温度，否则投票没意义
+  react:
+    enabled: false            # Function Calling 循环，替代"一次成型"的 generate
+    max_steps: 4              # 最多几轮 Thought→Action
+    max_tool_calls: 8         # 全局工具调用上限，防死循环烧 token
+  plan:
+    enabled: false            # 独立 Planning 阶段：先产出可校验计划，再写 SQL
+
+# ---------------------------------------------------------------- 真 HITL（P1-2）
+# 开着的效果：web 的问数请求带 thread_id，计划节点判定"问题有歧义"时
+# interrupt() 把图挂起，前端拿到 interrupted + 一句要问用户的话，
+# 用户补一句后走 /api/ask/resume 用同一个 thread_id 继续，SQL 只执行一次。
+# 关掉它（enabled: false）就回到"直接拒答并说明缺什么"的老行为。
+#
+# 注意一点：这不是"免费开关"。挂起前必须先有计划节点，所以带 thread_id 的请求
+# 会多一次计划调用（约 +1 次模型调用）。CLI 与 128 题评测不带 thread_id，
+# 走的仍是 generate 那条路，基线一分钱没多花。
+# ---------------------------------------------------------------- 长期记忆
+# 只存本人显式说出口的口径偏好（"以后按播放人数算"），不存历史结论/数字。
+# 关掉它（enabled: false）就回到只有 3 轮会话历史的旧行为，prompt 与缓存键不变。
+memory:
+  enabled: true
+  semantic: true              # BGE 语义相似度参与偏好召回（模型现成，零新增服务）
+                              # 关掉就退回字符重叠 + 指标命中，0 模型加载
+  semantic_min: 0.55          # 语义相似度下限；BGE 对无关文本也有 0.3~0.4 基础分
+  pool: 100                   # 召回候选池上限；再按相关度取 top 3
+  top: 3                      # 注入 prompt 的条数，控制在 3 条以内
+
+hitl:
+  enabled: true
+  max_pending: 200            # 进程内最多保留多少个未恢复的现场（超了丢最旧）
+
+# ---------------------------------------------------------------- 链路路由
+# P0 只开离线。realtime 段留着，实时链路恢复后把 enabled 改 true 即可，
+# 不必改代码——语义层的 global.realtime_lane 是同一个开关的声明。
+lane:
+  default: "offline"
+  offline:
+    enabled: true
+    catalog: "hive_catalog"
+    data_since: "2026-10-05"    # 实测 35 个分区，10-05 之前无数据
+    data_until: "2026-11-08"
+  realtime:
+    enabled: true
+    catalog: "internal"
+    mode: "snapshot"        # 不是 live：只查链路停止前产出的历史快照
+    reason: "Flink 链路自 2026-11-08 22:17 后未产出；白名单/时间窗/新鲜度由 agent/semantic/realtime.yaml 声明"
+
+# ---------------------------------------------------------------- ETL 执行通道
+# 生成物的执行通道是 161 的 Hive 引擎（Doris 2.x 不允许向外部 catalog 写数据）。
+# host 就是白名单：代码只连这一台，不接受任何请求参数覆盖。
+# 执行前会用 etlguard 重新校验一遍（不信任库里的历史记录）。
+etl_exec:
+  enabled: true
+  host: "192.168.128.161"
+  user: "root"
+  hive_bin: "/opt/module/hive/bin/hive"
+  timeout_s: 600
+
+# Doris FE 管理连接：只用于外部 catalog 的 REFRESH TABLE（元数据缓存不是实时的）。
+# 与问数账号 agent_ro 分开——写权只在执行收尾这一处用。
+doris_admin:
+  host: "192.168.128.163"
+  port: 9030
+  user: "root"
+  password: ""

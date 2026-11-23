@@ -1,0 +1,29 @@
+version: 1
+generated_at: '2026-11-15'
+source: answer_feedback (verdict=wrong)
+warning: 期望值必须独立重算后填写；expected 为空的条目不会被评测运行器读取。
+cases:
+- id: FB01
+  type: value
+  domain: 待定
+  intent: 待定
+  question: 2026-11-08 的完播率
+  expected: null
+  tags:
+  - 来自反馈
+  - 待重算
+  feedback:
+    trace_id: 20261115-154938-ae427ecb
+    reason: number
+    reason_cn: 数字不对
+    comment: ''
+    trust_level: high
+    at: '2026-11-15T15:50:18.430324+08:00'
+    window:
+    - '2026-11-08'
+    - '2026-11-08'
+  sql_seen: SELECT (SELECT COUNT(*) FROM dwd_play_end WHERE dt = '2026-11-08' AND
+    play_progress >= 0.9) / NULLIF((SELECT COUNT(*) FROM dwd_play_start WHERE dt =
+    '2026-11-08'), 0) AS complete_rate
+  note: 用户在「2026-11-15T15:50:18.430324+08:00」上标了『数字不对』。填 expected 前先独立重算；sql_seen
+    只是当时系统给的写法，**不是标准答案**。

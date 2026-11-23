@@ -1,0 +1,507 @@
+{
+ "cases": [
+  "C01",
+  "C08",
+  "C16",
+  "C24",
+  "C32",
+  "N04",
+  "P03",
+  "V06",
+  "V14",
+  "V22"
+ ],
+ "arms": {
+  "off": {
+   "overall": {
+    "n": 10,
+    "l1": 100.0,
+    "l2": 100.0,
+    "l3": 100.0,
+    "score": 100.0,
+    "passed": 10,
+    "failed": 0,
+    "tokens_in": 19464,
+    "tokens_out": 1060,
+    "answer_layer": 8,
+    "soft_mismatch": 0
+   },
+   "elapsed": 44.16183180000007,
+   "cases": [
+    {
+     "id": "C01",
+     "status": "PASS",
+     "note": "答案含9705=✓（实得 9705） ｜ 答案含-141（锚点 ['差值', '相差', '差距']）=✓（实得 -141） ｜ SQL含DWD_INTERACTION=True",
+     "l1": true,
+     "l3": true,
+     "sec": 5.61
+    },
+    {
+     "id": "C08",
+     "status": "PASS",
+     "note": "答案含7372=✓（实得 7,372） ｜ SQL含GROUP BY=True ｜ SQL含ORDER BY=True",
+     "l1": true,
+     "l3": true,
+     "sec": 5.0
+    },
+    {
+     "id": "C16",
+     "status": "PASS",
+     "note": "答案含469=✓（实得 469） ｜ SQL含DIM_SONG=True ｜ SQL含JOIN=True",
+     "l1": true,
+     "l3": true,
+     "sec": 4.02
+    },
+    {
+     "id": "C24",
+     "status": "PASS",
+     "note": "答案含12710=✓（实得 12710） ｜ 答案含-20（锚点 ['差值', '相差', '差距']）=✓（实得 -20）",
+     "l1": true,
+     "l3": true,
+     "sec": 4.49
+    },
+    {
+     "id": "C32",
+     "status": "PASS",
+     "note": "",
+     "l1": true,
+     "l3": true,
+     "sec": 4.62
+    },
+    {
+     "id": "N04",
+     "status": "PASS",
+     "note": "",
+     "l1": true,
+     "l3": true,
+     "sec": 4.3
+    },
+    {
+     "id": "P03",
+     "status": "PASS",
+     "note": "答案含142338=✓（实得 142,338）",
+     "l1": true,
+     "l3": true,
+     "sec": 3.75
+    },
+    {
+     "id": "V06",
+     "status": "PASS",
+     "note": "答案含1013=✓（实得 1,013）",
+     "l1": true,
+     "l3": true,
+     "sec": 4.12
+    },
+    {
+     "id": "V14",
+     "status": "PASS",
+     "note": "答案含7626=✓（实得 7,626）",
+     "l1": true,
+     "l3": true,
+     "sec": 4.25
+    },
+    {
+     "id": "V22",
+     "status": "PASS",
+     "note": "答案含89250=✓（实得 89,250）",
+     "l1": true,
+     "l3": true,
+     "sec": 3.94
+    }
+   ]
+  },
+  "cot": {
+   "overall": {
+    "n": 10,
+    "l1": 100.0,
+    "l2": 100.0,
+    "l3": 100.0,
+    "score": 100.0,
+    "passed": 10,
+    "failed": 0,
+    "tokens_in": 20644,
+    "tokens_out": 1738,
+    "answer_layer": 8,
+    "soft_mismatch": 0
+   },
+   "elapsed": 44.75189750000209,
+   "cases": [
+    {
+     "id": "C01",
+     "status": "PASS",
+     "note": "答案含9705=✓（实得 9705） ｜ 答案含-141（锚点 ['差值', '相差', '差距']）=✓（实得 -141） ｜ SQL含DWD_INTERACTION=True",
+     "l1": true,
+     "l3": true,
+     "sec": 4.24
+    },
+    {
+     "id": "C08",
+     "status": "PASS",
+     "note": "答案含7372=✓（实得 7,372） ｜ SQL含GROUP BY=True ｜ SQL含ORDER BY=True",
+     "l1": true,
+     "l3": true,
+     "sec": 4.54
+    },
+    {
+     "id": "C16",
+     "status": "PASS",
+     "note": "答案含469=✓（实得 469） ｜ SQL含DIM_SONG=True ｜ SQL含JOIN=True",
+     "l1": true,
+     "l3": true,
+     "sec": 4.73
+    },
+    {
+     "id": "C24",
+     "status": "PASS",
+     "note": "答案含12710=✓（实得 12710） ｜ 答案含-20（锚点 ['差值', '相差', '差距']）=✓（实得 -20）",
+     "l1": true,
+     "l3": true,
+     "sec": 4.8
+    },
+    {
+     "id": "C32",
+     "status": "PASS",
+     "note": "",
+     "l1": true,
+     "l3": true,
+     "sec": 4.76
+    },
+    {
+     "id": "N04",
+     "status": "PASS",
+     "note": "",
+     "l1": true,
+     "l3": true,
+     "sec": 4.59
+    },
+    {
+     "id": "P03",
+     "status": "PASS",
+     "note": "答案含142338=✓（实得 142,338）",
+     "l1": true,
+     "l3": true,
+     "sec": 4.44
+    },
+    {
+     "id": "V06",
+     "status": "PASS",
+     "note": "答案含1013=✓（实得 1,013）",
+     "l1": true,
+     "l3": true,
+     "sec": 4.09
+    },
+    {
+     "id": "V14",
+     "status": "PASS",
+     "note": "答案含7626=✓（实得 7,626）",
+     "l1": true,
+     "l3": true,
+     "sec": 3.95
+    },
+    {
+     "id": "V22",
+     "status": "PASS",
+     "note": "答案含89250=✓（实得 89,250）",
+     "l1": true,
+     "l3": true,
+     "sec": 4.56
+    }
+   ]
+  },
+  "fewshot": {
+   "overall": {
+    "n": 10,
+    "l1": 100.0,
+    "l2": 100.0,
+    "l3": 100.0,
+    "score": 100.0,
+    "passed": 10,
+    "failed": 0,
+    "tokens_in": 20598,
+    "tokens_out": 1099,
+    "answer_layer": 8,
+    "soft_mismatch": 0
+   },
+   "elapsed": 41.787789600002725,
+   "cases": [
+    {
+     "id": "C01",
+     "status": "PASS",
+     "note": "答案含9705=✓（实得 9705） ｜ 答案含-141（锚点 ['差值', '相差', '差距']）=✓（实得 -141） ｜ SQL含DWD_INTERACTION=True",
+     "l1": true,
+     "l3": true,
+     "sec": 4.46
+    },
+    {
+     "id": "C08",
+     "status": "PASS",
+     "note": "答案含7372=✓（实得 7,372） ｜ SQL含GROUP BY=True ｜ SQL含ORDER BY=True",
+     "l1": true,
+     "l3": true,
+     "sec": 4.09
+    },
+    {
+     "id": "C16",
+     "status": "PASS",
+     "note": "答案含469=✓（实得 469） ｜ SQL含DIM_SONG=True ｜ SQL含JOIN=True",
+     "l1": true,
+     "l3": true,
+     "sec": 4.25
+    },
+    {
+     "id": "C24",
+     "status": "PASS",
+     "note": "答案含12710=✓（实得 12710） ｜ 答案含-20（锚点 ['差值', '相差', '差距']）=✓（实得 -20）",
+     "l1": true,
+     "l3": true,
+     "sec": 3.84
+    },
+    {
+     "id": "C32",
+     "status": "PASS",
+     "note": "",
+     "l1": true,
+     "l3": true,
+     "sec": 4.53
+    },
+    {
+     "id": "N04",
+     "status": "PASS",
+     "note": "",
+     "l1": true,
+     "l3": true,
+     "sec": 4.09
+    },
+    {
+     "id": "P03",
+     "status": "PASS",
+     "note": "答案含142338=✓（实得 142,338）",
+     "l1": true,
+     "l3": true,
+     "sec": 3.91
+    },
+    {
+     "id": "V06",
+     "status": "PASS",
+     "note": "答案含1013=✓（实得 1,013）",
+     "l1": true,
+     "l3": true,
+     "sec": 4.05
+    },
+    {
+     "id": "V14",
+     "status": "PASS",
+     "note": "答案含7626=✓（实得 7,626）",
+     "l1": true,
+     "l3": true,
+     "sec": 3.96
+    },
+    {
+     "id": "V22",
+     "status": "PASS",
+     "note": "答案含89250=✓（实得 89,250）",
+     "l1": true,
+     "l3": true,
+     "sec": 4.57
+    }
+   ]
+  },
+  "react": {
+   "overall": {
+    "n": 10,
+    "l1": 100.0,
+    "l2": 100.0,
+    "l3": 100.0,
+    "score": 100.0,
+    "passed": 10,
+    "failed": 0,
+    "tokens_in": 0,
+    "tokens_out": 0,
+    "answer_layer": 8,
+    "soft_mismatch": 0
+   },
+   "elapsed": 117.26017710000087,
+   "cases": [
+    {
+     "id": "C01",
+     "status": "PASS",
+     "note": "答案含9705=✓（实得 9705） ｜ 答案含-141（锚点 ['差值', '相差', '差距']）=✓（实得 -141） ｜ SQL含DWD_INTERACTION=True",
+     "l1": true,
+     "l3": true,
+     "sec": 13.05
+    },
+    {
+     "id": "C08",
+     "status": "PASS",
+     "note": "答案含7372=✓（实得 7,372） ｜ SQL含GROUP BY=True ｜ SQL含ORDER BY=True",
+     "l1": true,
+     "l3": true,
+     "sec": 12.14
+    },
+    {
+     "id": "C16",
+     "status": "PASS",
+     "note": "答案含469=✓（实得 469） ｜ SQL含DIM_SONG=True ｜ SQL含JOIN=True",
+     "l1": true,
+     "l3": true,
+     "sec": 12.58
+    },
+    {
+     "id": "C24",
+     "status": "PASS",
+     "note": "答案含12710=✓（实得 12710） ｜ 答案含-20（锚点 ['差值', '相差', '差距']）=✓（实得 -20）",
+     "l1": true,
+     "l3": true,
+     "sec": 12.37
+    },
+    {
+     "id": "C32",
+     "status": "PASS",
+     "note": "",
+     "l1": true,
+     "l3": true,
+     "sec": 10.05
+    },
+    {
+     "id": "N04",
+     "status": "PASS",
+     "note": "",
+     "l1": true,
+     "l3": true,
+     "sec": 16.75
+    },
+    {
+     "id": "P03",
+     "status": "PASS",
+     "note": "答案含142338=✓（实得 142,338）",
+     "l1": true,
+     "l3": true,
+     "sec": 7.92
+    },
+    {
+     "id": "V06",
+     "status": "PASS",
+     "note": "答案含1013=✓（实得 1,013）",
+     "l1": true,
+     "l3": true,
+     "sec": 7.84
+    },
+    {
+     "id": "V14",
+     "status": "PASS",
+     "note": "答案含7626=✓（实得 7,626）",
+     "l1": true,
+     "l3": true,
+     "sec": 12.38
+    },
+    {
+     "id": "V22",
+     "status": "PASS",
+     "note": "答案含89250=✓（实得 89,250）",
+     "l1": true,
+     "l3": true,
+     "sec": 12.12
+    }
+   ]
+  },
+  "plan": {
+   "overall": {
+    "n": 10,
+    "l1": 100.0,
+    "l2": 100.0,
+    "l3": 100.0,
+    "score": 100.0,
+    "passed": 10,
+    "failed": 0,
+    "tokens_in": 20491,
+    "tokens_out": 1113,
+    "answer_layer": 8,
+    "soft_mismatch": 0
+   },
+   "elapsed": 79.98376990000179,
+   "cases": [
+    {
+     "id": "C01",
+     "status": "PASS",
+     "note": "答案含9705=✓（实得 9705） ｜ 答案含-141（锚点 ['差值', '相差', '差距']）=✓（实得 -141） ｜ SQL含DWD_INTERACTION=True",
+     "l1": true,
+     "l3": true,
+     "sec": 8.4
+    },
+    {
+     "id": "C08",
+     "status": "PASS",
+     "note": "答案含7372=✓（实得 7,372） ｜ SQL含GROUP BY=True ｜ SQL含ORDER BY=True",
+     "l1": true,
+     "l3": true,
+     "sec": 7.63
+    },
+    {
+     "id": "C16",
+     "status": "PASS",
+     "note": "答案含469=✓（实得 469） ｜ SQL含DIM_SONG=True ｜ SQL含JOIN=True",
+     "l1": true,
+     "l3": true,
+     "sec": 7.95
+    },
+    {
+     "id": "C24",
+     "status": "PASS",
+     "note": "答案含12710=✓（实得 12710） ｜ 答案含-20（锚点 ['差值', '相差', '差距']）=✓（实得 -20）",
+     "l1": true,
+     "l3": true,
+     "sec": 8.46
+    },
+    {
+     "id": "C32",
+     "status": "PASS",
+     "note": "",
+     "l1": true,
+     "l3": true,
+     "sec": 8.42
+    },
+    {
+     "id": "N04",
+     "status": "PASS",
+     "note": "",
+     "l1": true,
+     "l3": true,
+     "sec": 7.65
+    },
+    {
+     "id": "P03",
+     "status": "PASS",
+     "note": "答案含142338=✓（实得 142,338）",
+     "l1": true,
+     "l3": true,
+     "sec": 7.89
+    },
+    {
+     "id": "V06",
+     "status": "PASS",
+     "note": "答案含1013=✓（实得 1,013）",
+     "l1": true,
+     "l3": true,
+     "sec": 7.88
+    },
+    {
+     "id": "V14",
+     "status": "PASS",
+     "note": "答案含7626=✓（实得 7,626）",
+     "l1": true,
+     "l3": true,
+     "sec": 7.8
+    },
+    {
+     "id": "V22",
+     "status": "PASS",
+     "note": "答案含89250=✓（实得 89,250）",
+     "l1": true,
+     "l3": true,
+     "sec": 7.87
+    }
+   ]
+  }
+ },
+ "ts": "2026-11-14 15:46:51"
+}

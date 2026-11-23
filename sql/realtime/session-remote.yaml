@@ -1,0 +1,23 @@
+# =============================================================================
+# Flink SQL Client 会话配置：remote 模式
+#
+# 为什么必须是 remote 而不是默认的 embedded：
+#   embedded 模式下作业跑在 sql-client 进程内部，脚本执行完 sql-client 一退出，
+#   作业就被取消。需要用 remote 把作业提交到 161 上常驻的 session cluster
+#   （start-cluster.sh 起的那个，REST 端口 8081），sql-client 只是个提交客户端。
+#
+# 使用：bin/sql-client.sh -s sql/realtime/session-remote.yaml -f job_a_ods.sql
+# =============================================================================
+deployment:
+  target: remote
+  address: WWC161:8081
+
+configuration:
+  # 作业提交后立即返回，不阻塞 sql-client
+  execution.attached: "false"
+  # 每 10 秒做一次 checkpoint，决定 Doris 写入的最终一致窗口
+  execution.checkpointing.interval: "10s"
+  # 状态放在内存即可，作业重启后从 Kafka 位点重放
+  state.backend: hashmap
+  # 空闲分区不阻塞 watermark（作业 C 的事件时间窗口依赖这一项）
+  table.exec.source.idle-timeout: "30s"

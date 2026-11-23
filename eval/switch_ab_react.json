@@ -1,0 +1,213 @@
+{
+ "cases": [
+  "C01",
+  "C08",
+  "C16",
+  "C24",
+  "C32",
+  "N04",
+  "P03",
+  "V06",
+  "V14",
+  "V22"
+ ],
+ "arms": {
+  "off": {
+   "overall": {
+    "n": 10,
+    "l1": 100.0,
+    "l2": 100.0,
+    "l3": 100.0,
+    "score": 100.0,
+    "passed": 10,
+    "failed": 0,
+    "tokens_in": 19464,
+    "tokens_out": 1103,
+    "answer_layer": 8,
+    "soft_mismatch": 0
+   },
+   "elapsed": 36.3303373000017,
+   "cases": [
+    {
+     "id": "C01",
+     "status": "PASS",
+     "note": "答案含9705=✓（实得 9705） ｜ 答案含-141（锚点 ['差值', '相差', '差距']）=✓（实得 -141） ｜ SQL含DWD_INTERACTION=True",
+     "l1": true,
+     "l3": true,
+     "sec": 4.69
+    },
+    {
+     "id": "C08",
+     "status": "PASS",
+     "note": "答案含7372=✓（实得 7,372） ｜ SQL含GROUP BY=True ｜ SQL含ORDER BY=True",
+     "l1": true,
+     "l3": true,
+     "sec": 3.63
+    },
+    {
+     "id": "C16",
+     "status": "PASS",
+     "note": "答案含469=✓（实得 469） ｜ SQL含DIM_SONG=True ｜ SQL含JOIN=True",
+     "l1": true,
+     "l3": true,
+     "sec": 3.96
+    },
+    {
+     "id": "C24",
+     "status": "PASS",
+     "note": "答案含12710=✓（实得 12710） ｜ 答案含-20（锚点 ['差值', '相差', '差距']）=✓（实得 -20）",
+     "l1": true,
+     "l3": true,
+     "sec": 3.26
+    },
+    {
+     "id": "C32",
+     "status": "PASS",
+     "note": "",
+     "l1": true,
+     "l3": true,
+     "sec": 3.79
+    },
+    {
+     "id": "N04",
+     "status": "PASS",
+     "note": "",
+     "l1": true,
+     "l3": true,
+     "sec": 3.57
+    },
+    {
+     "id": "P03",
+     "status": "PASS",
+     "note": "答案含142338=✓（实得 142,338）",
+     "l1": true,
+     "l3": true,
+     "sec": 3.52
+    },
+    {
+     "id": "V06",
+     "status": "PASS",
+     "note": "答案含1013=✓（实得 1,013）",
+     "l1": true,
+     "l3": true,
+     "sec": 3.15
+    },
+    {
+     "id": "V14",
+     "status": "PASS",
+     "note": "答案含7626=✓（实得 7,626）",
+     "l1": true,
+     "l3": true,
+     "sec": 3.43
+    },
+    {
+     "id": "V22",
+     "status": "PASS",
+     "note": "答案含89250=✓（实得 89,250）",
+     "l1": true,
+     "l3": true,
+     "sec": 3.28
+    }
+   ]
+  },
+  "react": {
+   "overall": {
+    "n": 10,
+    "l1": 100.0,
+    "l2": 100.0,
+    "l3": 100.0,
+    "score": 100.0,
+    "passed": 10,
+    "failed": 0,
+    "tokens_in": 0,
+    "tokens_out": 0,
+    "answer_layer": 8,
+    "soft_mismatch": 0
+   },
+   "elapsed": 94.11790620000102,
+   "cases": [
+    {
+     "id": "C01",
+     "status": "PASS",
+     "note": "答案含9705=✓（实得 9705） ｜ 答案含-141（锚点 ['差值', '相差', '差距']）=✓（实得 -141） ｜ SQL含DWD_INTERACTION=True",
+     "l1": true,
+     "l3": true,
+     "sec": 9.74
+    },
+    {
+     "id": "C08",
+     "status": "PASS",
+     "note": "答案含7372=✓（实得 7,372） ｜ SQL含GROUP BY=True ｜ SQL含ORDER BY=True",
+     "l1": true,
+     "l3": true,
+     "sec": 10.01
+    },
+    {
+     "id": "C16",
+     "status": "PASS",
+     "note": "答案含469=✓（实得 469） ｜ SQL含DIM_SONG=True ｜ SQL含JOIN=True",
+     "l1": true,
+     "l3": true,
+     "sec": 13.8
+    },
+    {
+     "id": "C24",
+     "status": "PASS",
+     "note": "答案含12710=✓（实得 12710） ｜ 答案含-20（锚点 ['差值', '相差', '差距']）=✓（实得 -20）",
+     "l1": true,
+     "l3": true,
+     "sec": 6.82
+    },
+    {
+     "id": "C32",
+     "status": "PASS",
+     "note": "",
+     "l1": true,
+     "l3": true,
+     "sec": 6.83
+    },
+    {
+     "id": "N04",
+     "status": "PASS",
+     "note": "",
+     "l1": true,
+     "l3": true,
+     "sec": 13.33
+    },
+    {
+     "id": "P03",
+     "status": "PASS",
+     "note": "答案含142338=✓（实得 142,338）",
+     "l1": true,
+     "l3": true,
+     "sec": 6.95
+    },
+    {
+     "id": "V06",
+     "status": "PASS",
+     "note": "答案含1013=✓（实得 1,013）",
+     "l1": true,
+     "l3": true,
+     "sec": 6.36
+    },
+    {
+     "id": "V14",
+     "status": "PASS",
+     "note": "答案含7626=✓（实得 7,626）",
+     "l1": true,
+     "l3": true,
+     "sec": 9.98
+    },
+    {
+     "id": "V22",
+     "status": "PASS",
+     "note": "答案含89250=✓（实得 89,250）",
+     "l1": true,
+     "l3": true,
+     "sec": 10.26
+    }
+   ]
+  }
+ },
+ "ts": "2026-11-14 15:49:25"
+}

@@ -1,0 +1,2343 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>企鹅问数 · Data Agent</title>
+<style>
+/* ============================================================
+   浅色工作台界面（对齐企业级开源 DataAgent 的三大件：
+   ① 统一语义层可浏览 /api/semantic；② 数据源面板可查；
+   ③ Trace DAG 可审计可回放 /api/trace/{id}）
+   约束：
+   1) 只有一套浅色主题，不再有深色切换
+   2) 主界面保持单栏对话；语义层/数据源/回放都是弹层，不抢主界面
+   3) 执行过程收进答案卡里的折叠区，默认关闭，需要时才展开
+      —— 折叠区里现在是「DAG 拓扑 + 节点列表」双层证据
+   4) 层级靠 1px 细线和留白，不靠阴影和色块
+   ============================================================ */
+:root{
+  --ui:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  --mono:ui-monospace,"SF Mono","JetBrains Mono","Cascadia Code",Consolas,"Liberation Mono",Menlo,monospace;
+
+  --bg:#ffffff; --surface:#ffffff; --surface-2:#fafafa; --surface-3:#f2f2f0;
+  --border:#e8e8e5; --border-2:#d6d6d2;
+  --text:#18181b; --muted:#71717a; --faint:#a1a1aa;
+
+  --primary:#2563eb; --primary-soft:rgba(37,99,235,.06); --primary-line:rgba(37,99,235,.22);
+  --ok:#15803d; --ok-soft:rgba(21,128,61,.06); --ok-line:rgba(21,128,61,.22);
+  --warn:#a16207; --warn-soft:rgba(161,98,7,.06); --warn-line:rgba(161,98,7,.22);
+  --err:#c02626; --err-soft:rgba(192,38,38,.06); --err-line:rgba(192,38,38,.22);
+
+  --accent-bg:#18181b; --accent-fg:#ffffff;
+  --code:#141416; --code-text:#d8d8da;
+
+  --r:10px; --r-sm:6px; --width:780px;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;
+  font:14px/1.65 var(--ui);display:flex;flex-direction:row;height:100%;overflow:hidden}
+
+/* ---------- 侧边栏：会话历史 ---------- */
+.side{width:264px;flex:none;display:flex;flex-direction:column;background:var(--surface-2);
+  border-right:1px solid var(--border);min-height:0}
+body.side-hidden .side{display:none}
+.side-head{padding:12px 12px 8px}
+.new-chat{width:100%;height:34px;border:1px solid var(--border-2);border-radius:8px;
+  background:var(--surface);font-size:12.5px;color:var(--text);
+  display:flex;align-items:center;justify-content:center;gap:6px}
+.new-chat:hover{background:var(--bg);border-color:var(--faint)}
+.new-chat span{font-size:15px;line-height:1;color:var(--muted)}
+.side-list{flex:1;overflow-y:auto;padding:2px 8px 8px}
+.conv{position:relative;padding:8px 26px 8px 10px;border-radius:6px;cursor:pointer;
+  display:flex;flex-direction:column;gap:2px}
+.conv:hover{background:var(--surface-3)}
+.conv.active{background:var(--surface-3)}
+.conv.active:before{content:"";position:absolute;left:0;top:7px;bottom:7px;width:2px;
+  background:var(--text);border-radius:2px}
+.conv .ct{font-size:12.5px;color:var(--text);white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;line-height:1.45}
+.conv .cm{font:10.5px var(--mono);color:var(--faint)}
+.conv .cdel{position:absolute;right:5px;top:50%;transform:translateY(-50%);width:20px;
+  height:20px;border:0;border-radius:4px;background:none;color:var(--faint);
+  font-size:14px;line-height:1;display:none;place-items:center;padding:0}
+.conv:hover .cdel{display:grid}
+.conv .cdel:hover{background:var(--err-soft);color:var(--err)}
+.conv-empty{padding:18px 10px;font-size:11.5px;color:var(--faint);text-align:center;line-height:1.8}
+.side-foot{padding:8px 14px;border-top:1px solid var(--border);font:10.5px var(--mono);color:var(--faint)}
+.side-btn{border:0;background:none;color:var(--muted);font-size:15px;line-height:1;
+  padding:4px 7px;border-radius:5px;flex:none}
+.side-btn:hover{background:var(--surface-2);color:var(--text)}
+.side-mask{display:none}
+button,input{font-family:inherit;color:inherit}
+button{cursor:pointer;background:none}
+a{color:var(--primary);text-decoration:none}
+a:hover{text-decoration:underline}
+::selection{background:#e6efff}
+*::-webkit-scrollbar{width:9px;height:9px}
+*::-webkit-scrollbar-thumb{background:#dcdcd8;border-radius:9px;border:2px solid var(--bg)}
+*::-webkit-scrollbar-thumb:hover{background:#c4c4be}
+*::-webkit-scrollbar-track{background:transparent}
+
+/* ---------- header：一条细线 ---------- */
+header{height:52px;flex:none;background:var(--bg);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:14px;padding:0 20px;position:relative;z-index:20}
+.brand{display:flex;align-items:center;gap:10px;font-size:13.5px;font-weight:600;letter-spacing:-.01em}
+.logo{width:31px;height:31px;flex:none;border-radius:50%;display:grid;place-items:center;
+  background:linear-gradient(160deg,#f4f6fa,#e8ecf3);border:1px solid var(--border);overflow:hidden}
+.logo svg{width:25px;height:25px;display:block}
+.brand small{display:block;font:400 11px var(--mono);color:var(--faint);letter-spacing:0;margin-top:1px}
+.hstat{margin-left:auto;display:flex;align-items:center;gap:14px}
+.pill{display:flex;align-items:center;gap:6px;font:11.5px var(--mono);color:var(--muted);white-space:nowrap}
+.dot{width:5px;height:5px;border-radius:50%;background:var(--ok);flex:none}
+.dot.blue{background:var(--primary)} .dot.amber{background:var(--warn)}
+.dot.red{background:var(--err)} .dot.gray{background:var(--faint)}
+
+.ghost{background:none;border:1px solid var(--border);border-radius:var(--r-sm);color:var(--muted);
+  font-size:11.5px;padding:5px 10px;transition:.12s}
+.ghost:hover{background:var(--surface-2);border-color:var(--border-2);color:var(--text);text-decoration:none}
+a.ghost{display:inline-block;line-height:1.35}
+
+/* 状态浮层：技术指标不摆在主界面上，但也没丢 */
+.status-pop{position:absolute;top:48px;right:16px;width:330px;background:var(--surface);
+  border:1px solid var(--border-2);border-radius:10px;box-shadow:0 16px 40px rgba(0,0,0,.10);
+  padding:6px;z-index:30}
+.status-pop[hidden]{display:none}
+.srow{display:flex;align-items:baseline;gap:8px;padding:7px 10px;border-radius:6px;font-size:12px}
+.srow:hover{background:var(--surface-2)}
+.srow .k{color:var(--faint);font:10.5px var(--mono);min-width:64px;flex:none}
+.srow .v{color:var(--text);font-family:var(--mono);font-size:11.5px;word-break:break-all}
+.status-pop .sep{height:1px;background:var(--border);margin:4px 6px}
+
+/* ---------- 单栏主体 ---------- */
+#app{flex:1;display:flex;flex-direction:column;min-height:0;min-width:0}
+#messages{flex:1;overflow-y:auto;padding:30px 24px 6px;scroll-behavior:smooth}
+#messages > *{max-width:var(--width);margin:0 auto 26px}
+
+/* 空态：标题 + 一点说明 + 示例问题 */
+.empty{display:flex;flex-direction:column;justify-content:center;min-height:100%;
+  text-align:center;color:var(--faint);padding-bottom:40px}
+.empty .etitle{font-size:20px;font-weight:600;color:var(--text);letter-spacing:-.02em;margin-bottom:6px}
+.empty .esub{font-size:13px;color:var(--muted);line-height:1.8;margin-bottom:26px}
+.empty .esub b{color:var(--text);font-weight:500}
+.quick{display:flex;gap:7px;flex-wrap:wrap;justify-content:center;max-width:600px;margin:0 auto}
+.chip{font:11.5px var(--mono);color:var(--muted);background:transparent;
+  border:1px solid var(--border);border-radius:6px;padding:5px 10px;transition:.12s}
+.chip:hover{border-color:var(--border-2);background:var(--surface-2);color:var(--text)}
+.chip.refuse{border-style:dashed;color:var(--err);border-color:var(--err-line)}
+.chip.refuse:hover{background:var(--err-soft);border-color:var(--err-line)}
+
+.msg{animation:fade .2s ease}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+/* 用户输入：右侧气泡，右下角收角——像发出去的一条消息 */
+.q{display:flex;justify-content:flex-end;margin-bottom:14px}
+.q .txt{max-width:min(76%,540px);background:var(--surface-3);color:var(--text);
+  border-radius:14px 14px 4px 14px;padding:9px 14px;font-size:14.5px;font-weight:450;
+  line-height:1.6;word-break:break-word}
+
+/* 助手行：左边一只企鹅，右边是答案本体 */
+.a{display:flex;gap:12px;align-items:flex-start}
+.a .av{width:31px;height:31px;flex:none;border-radius:50%;display:grid;place-items:center;
+  background:linear-gradient(160deg,#f4f6fa,#e8ecf3);border:1px solid var(--border);
+  margin-top:1px;overflow:hidden}
+.a .av svg{width:25px;height:25px;display:block}
+.a .abody{flex:1;min-width:0}
+
+/* ---------- 答案卡片 ---------- */
+.card{border:1px solid var(--border);border-radius:var(--r);overflow:hidden;background:var(--surface)}
+.card-top{padding:13px 16px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.card-top h2{margin:0;font-size:14.5px;font-weight:600;letter-spacing:-.01em}
+.tag{font:10.5px var(--mono);padding:2px 6px;border-radius:4px;background:var(--surface-2);
+  border:1px solid transparent;color:var(--muted);letter-spacing:.02em}
+.tag.ok{background:var(--ok-soft);color:var(--ok);border-color:var(--ok-line)}
+.tag.err{background:var(--err-soft);color:var(--err);border-color:var(--err-line)}
+.tag.info{background:var(--primary-soft);color:var(--primary);border-color:var(--primary-line)}
+.card-body{padding:16px}
+
+/* 单值指标：竖线分隔 */
+.hero{display:flex;gap:0;flex-wrap:wrap;margin:0 0 16px}
+.hero-item{padding:2px 22px 2px 14px;border-left:1px solid var(--border-2);min-width:120px}
+.hero-item:first-child{padding-left:0;border-left:0}
+.hero-item .k{display:block;font:10.5px var(--mono);color:var(--faint);margin-bottom:4px;
+  letter-spacing:.03em;white-space:nowrap}
+.hero-item .v{font-size:26px;font-weight:600;letter-spacing:-.03em;
+  font-variant-numeric:tabular-nums;line-height:1.2}
+
+/* 表格：只有横线 */
+.table-wrap{overflow-x:auto;border-top:1px solid var(--border);margin:0 0 16px}
+table{border-collapse:collapse;width:100%;font-size:12.5px;font-variant-numeric:tabular-nums}
+th{background:none;color:var(--faint);text-align:left;font:11.5px var(--mono);
+  padding:8px 10px;border-bottom:1px solid var(--border);white-space:nowrap;letter-spacing:.02em}
+th:first-child,td:first-child{padding-left:0}
+td{padding:8px 10px;border-bottom:1px solid var(--border);white-space:nowrap;color:var(--text)}
+tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:var(--surface-2)}
+
+/* 元信息：格子线用 outline 内缩画，行末不满时不会露出灰底 */
+.meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  border:1px solid var(--border);border-radius:var(--r-sm);overflow:hidden;margin:0 0 16px}
+.meta div{background:var(--surface);padding:9px 12px;font-size:12px;line-height:1.5;
+  outline:1px solid var(--border);outline-offset:-1px}
+.meta b{color:var(--faint);font:400 10.5px var(--mono);display:block;letter-spacing:.04em;margin-bottom:2px}
+
+/* 提示条 */
+.note{font-size:12.5px;padding:7px 12px;border-radius:0 4px 4px 0;margin:0 0 10px;
+  line-height:1.65;background:transparent;border-left:2px solid var(--border-2);color:var(--muted)}
+.note.info{background:var(--primary-soft);border-left-color:var(--primary);color:var(--text)}
+.note.warn{background:var(--warn-soft);border-left-color:var(--warn);color:var(--text)}
+.note.err{background:var(--err-soft);border-left-color:var(--err);color:var(--text)}
+
+.details-meta{white-space:pre-wrap;line-height:1.9;font-size:13.5px;color:var(--text)}
+.details-meta code{background:var(--surface-2);border:1px solid var(--border);border-radius:4px;
+  padding:1px 5px;font:11.5px var(--mono);color:var(--primary)}
+.details-meta b{color:var(--text);font-weight:600}
+
+/* SQL 块 */
+.sqlbox{background:var(--code);border:1px solid var(--border);border-radius:var(--r-sm);
+  overflow:hidden;margin-top:4px}
+.sqlbox .bar{display:flex;align-items:center;gap:8px;padding:6px 10px;
+  border-bottom:1px solid rgba(255,255,255,.07);color:#8b8f97;font:10.5px var(--mono);letter-spacing:.03em}
+.sqlbox .bar button{margin-left:auto;background:transparent;border:1px solid rgba(255,255,255,.12);
+  color:#b3b7bf;border-radius:4px;padding:2px 8px;font:10.5px var(--mono)}
+.sqlbox .bar button:hover{background:rgba(255,255,255,.08);color:#eee}
+pre{margin:0;padding:12px 14px;overflow-x:auto;color:var(--code-text);
+  font:12px/1.7 var(--mono);white-space:pre-wrap;word-break:break-word}
+details.raw{margin-top:12px;font-size:11.5px;color:var(--faint)}
+details.raw summary{cursor:pointer;font-family:var(--mono);letter-spacing:.02em}
+details.raw summary:hover{color:var(--muted)}
+details.raw pre{background:var(--code);color:var(--code-text);border:1px solid var(--border);
+  border-radius:var(--r-sm);margin-top:8px}
+
+/* ---------- 执行过程：默认收起 ---------- */
+.fold{margin-top:14px;border-top:1px solid var(--border);padding-top:2px}
+.fold > summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;
+  padding:8px 0 2px;font:11px var(--mono);color:var(--faint);letter-spacing:.02em;user-select:none}
+.fold > summary::-webkit-details-marker{display:none}
+.fold > summary:before{content:"›";display:inline-block;transition:transform .15s;
+  font-size:13px;line-height:1;color:var(--border-2)}
+.fold[open] > summary:before{transform:rotate(90deg)}
+.fold > summary:hover{color:var(--muted)}
+.fold .fold-body{padding:6px 0 4px}
+.fold .hint{font:10.5px var(--mono);color:var(--faint)}
+
+.section-title{font:500 10px var(--mono);letter-spacing:.14em;color:var(--faint);
+  text-transform:uppercase;margin:16px 0 8px;display:flex;align-items:center;gap:8px}
+.section-title:first-child{margin-top:2px}
+.section-title:after{content:"";flex:1;height:1px;background:var(--border)}
+.steps{position:relative;padding-left:14px}
+.steps:before{content:"";position:absolute;left:3px;top:8px;bottom:8px;width:1px;background:var(--border-2)}
+.step{position:relative;padding:6px 0 6px 2px;margin-bottom:2px}
+.step:hover{background:var(--surface-2)}
+.step:before{content:"";position:absolute;left:-14px;top:13px;width:7px;height:7px;border-radius:50%;
+  background:var(--bg);border:1px solid var(--border-2);box-sizing:border-box}
+.step.ok:before{background:var(--ok);border-color:var(--ok)}
+.step.err:before{background:var(--err);border-color:var(--err)}
+.step.warn:before{background:var(--warn);border-color:var(--warn)}
+.step.info:before{background:var(--muted);border-color:var(--muted)}
+.step .h{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--muted)}
+.step .h b{font:500 11.5px var(--mono);color:var(--text)}
+.step .h .n{margin-left:auto;font:10px var(--mono);color:var(--faint)}
+.step .d{font-size:12px;color:var(--muted);margin-top:2px;word-break:break-word;line-height:1.6}
+.step details{margin-top:6px;font-size:11px;color:var(--faint)}
+.step details summary{cursor:pointer;font-family:var(--mono)}
+.step details pre{background:var(--code);border:1px solid var(--border);color:var(--code-text);
+  font:10.5px/1.6 var(--mono);padding:8px 10px;margin-top:6px;max-height:220px;overflow:auto;border-radius:4px}
+
+.badge{display:inline-block;font:10.5px var(--mono);padding:2px 7px;border-radius:4px;
+  margin:0 5px 5px 0;border:1px solid transparent}
+.badge.err{background:var(--err-soft);color:var(--err);border-color:var(--err-line)}
+.badge.warn{background:var(--warn-soft);color:var(--warn);border-color:var(--warn-line)}
+.badge.ok{background:var(--ok-soft);color:var(--ok);border-color:var(--ok-line)}
+.badge.info{background:var(--primary-soft);color:var(--primary);border-color:var(--primary-line)}
+/* 可信度：答案级元信息，比 badge 更醒目一档——它回答的是"这个数敢不敢用"。
+   三级用同一套色：高=ok / 中=warn / 低=err，不引新色。 */
+.trust{display:inline-block;font:11px var(--mono);padding:2px 8px;border-radius:4px;
+  border:1px solid transparent;margin-left:8px}
+.trust.ok{background:var(--ok-soft);color:var(--ok);border-color:var(--ok-line)}
+.trust.warn{background:var(--warn-soft);color:var(--warn);border-color:var(--warn-line)}
+.trust.err{background:var(--err-soft);color:var(--err);border-color:var(--err-line)}
+.trust-why{font-size:12px;line-height:1.65;color:var(--muted);background:var(--surface-2);
+  border-left:2px solid var(--border-2);padding:7px 10px;border-radius:0 4px 4px 0;margin-bottom:10px}
+.trust-why b{color:var(--text);font-weight:600}
+.trust-why.low{border-left-color:var(--err);background:var(--err-soft);color:var(--err)}
+/* 口径版本：折叠区顶部一行，等宽字体便于比对两个版本串是否相同 */
+.cv-line{font-size:12px;color:var(--muted);margin-bottom:8px}
+.cv-line code{font-family:var(--mono);font-size:12px;background:var(--surface-2);
+  border:1px solid var(--border);border-radius:4px;padding:1px 5px;color:var(--text)}
+/* 反馈条：答案卡底部一行。点"不准"才展开原因——一上来摆 5 个按钮，
+   用户会先想着选哪个而不是判断准不准。 */
+.fb{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:14px 0 2px;
+  padding-top:11px;border-top:1px dashed var(--border)}
+.fb-q{font-size:11.5px;color:var(--faint)}
+.fb-btn{font:11.5px var(--mono);padding:3px 10px;border-radius:4px;cursor:pointer;
+  border:1px solid var(--border-2);background:var(--surface-2);color:var(--muted)}
+.fb-btn:hover{color:var(--text);border-color:var(--primary-line);background:var(--primary-soft)}
+.fb-btn.sel{background:var(--primary-soft);color:var(--primary);border-color:var(--primary-line)}
+.fb-state{font:11px var(--mono);color:var(--faint)}
+.fb-state.ok{color:var(--ok)}
+.fb-state.err{color:var(--err)}
+.evol{border:1px solid var(--border);border-radius:var(--r-sm);overflow:hidden;margin-bottom:8px}
+.evol .eh{background:var(--surface-2);padding:6px 10px;font:10.5px var(--mono);color:var(--faint);
+  border-bottom:1px solid var(--border);display:flex;gap:8px}
+.evol .eh .stage{color:var(--text)}
+.evol pre{background:var(--code);color:var(--code-text);font:11px/1.6 var(--mono);padding:9px 11px}
+.fixline{font:11.5px var(--mono);color:var(--muted);padding:4px 0 4px 10px;
+  border-left:1px solid var(--border-2)}
+
+/* ---------- 输入区 ---------- */
+.composer{flex:none;padding:8px 24px 14px;background:var(--bg);
+  max-width:calc(var(--width) + 48px);width:100%;margin:0 auto}
+.cbox{display:flex;align-items:flex-end;gap:8px;border:1px solid var(--border);
+  background:var(--surface);border-radius:18px;padding:7px 7px 7px 16px;
+  box-shadow:0 1px 2px rgba(0,0,0,.03);transition:.12s}
+.cbox:focus-within{border-color:var(--border-2);box-shadow:0 4px 18px rgba(0,0,0,.06)}
+.cbox textarea{flex:1;min-width:0;border:0;outline:none;resize:none;background:none;
+  color:var(--text);font:14.5px/1.6 var(--ui);padding:6px 0;min-height:28px;max-height:168px;
+  overflow-y:auto;display:block}
+.cbox textarea::placeholder{color:var(--faint)}
+#send{width:33px;height:33px;flex:none;border:0;border-radius:50%;background:var(--accent-bg);
+  color:var(--accent-fg);display:grid;place-items:center;transition:opacity .12s,transform .1s}
+#send:hover{opacity:.85}
+#send:active{transform:scale(.94)}
+#send:disabled{opacity:.28;cursor:not-allowed}
+#send svg{width:15px;height:15px;display:block}
+.cfoot{display:flex;justify-content:space-between;gap:12px;padding:7px 4px 0;
+  font:10.5px var(--mono);color:var(--faint);letter-spacing:.02em}
+.cfoot kbd{font:inherit;border:0;background:none;color:var(--muted)}
+.thinking{display:flex;align-items:center;gap:9px;color:var(--muted);font-size:12.5px;
+  padding:6px 0;font-family:var(--mono)}
+.spin{width:11px;height:11px;border:1.5px solid var(--border-2);border-top-color:var(--text);
+  border-radius:50%;animation:rot .7s linear infinite}
+@keyframes rot{to{transform:rotate(360deg)}}
+
+/* ---------- 身份 ---------- */
+.who{display:flex;align-items:center;gap:8px;padding-left:14px;border-left:1px solid var(--border);
+  font-size:11.5px;color:var(--muted);white-space:nowrap}
+.who #who-name{color:var(--text);font-weight:500}
+.who .role{font:10.5px var(--mono);background:none;color:var(--faint);
+  border:1px solid var(--border);border-radius:4px;padding:2px 6px}
+.who .ghost{padding:4px 9px}
+
+/* ---------- 弹层 ---------- */
+.overlay{position:fixed;inset:0;background:rgba(24,24,27,.34);backdrop-filter:blur(3px);
+  display:grid;place-items:center;z-index:60;padding:20px}
+.overlay[hidden]{display:none}
+.login-card{width:100%;max-width:380px;background:var(--surface);border:1px solid var(--border-2);
+  border-radius:12px;box-shadow:0 24px 60px rgba(0,0,0,.18);padding:26px 24px 20px}
+.login-card .lg-logo{width:48px;height:48px;margin:0 auto 14px;border-radius:50%;
+  display:grid;place-items:center;overflow:hidden;
+  background:linear-gradient(160deg,#f4f6fa,#e8ecf3);border:1px solid var(--border)}
+.login-card .lg-logo svg{width:38px;height:38px;display:block}
+.login-card h1{margin:0 0 6px;font-size:17px;font-weight:600;letter-spacing:-.01em;text-align:center}
+.login-card p.sub{margin:0 0 20px;font-size:12px;color:var(--muted);line-height:1.7}
+.field{margin-bottom:12px}
+.field label{display:block;font:10.5px var(--mono);color:var(--faint);
+  margin-bottom:5px;letter-spacing:.04em}
+.field input{width:100%;height:38px;border:1px solid var(--border);border-radius:var(--r-sm);
+  padding:0 11px;font-size:13.5px;color:var(--text);background:var(--bg);outline:none}
+.field input:focus{border-color:var(--border-2);background:var(--surface-2)}
+.login-card button.primary{width:100%;height:38px;border:0;border-radius:var(--r-sm);
+  color:var(--accent-fg);font-size:13px;font-weight:600;background:var(--accent-bg);margin-top:4px}
+.login-card button.primary:hover{opacity:.86}
+.login-card button.primary:disabled{opacity:.4;cursor:default}
+.login-err{margin-top:11px;font-size:12px;color:var(--err);background:var(--err-soft);
+  border-left:2px solid var(--err);border-radius:0 4px 4px 0;padding:7px 10px;line-height:1.6}
+.login-err[hidden]{display:none}
+.accounts{margin-top:18px;padding-top:14px;border-top:1px solid var(--border);
+  font:10.5px/2 var(--mono);color:var(--faint)}
+.accounts b{color:var(--muted);font-weight:500}
+
+.audit-wrap{width:100%;max-width:1180px;max-height:86vh;background:var(--surface);
+  border:1px solid var(--border-2);border-radius:12px;
+  box-shadow:0 24px 60px rgba(0,0,0,.18);display:flex;flex-direction:column;overflow:hidden}
+.audit-head{padding:14px 18px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:12px}
+.audit-head h2{margin:0;font-size:14px;font-weight:600}
+.audit-head .sub{font:11px var(--mono);color:var(--faint)}
+.audit-head .spacer{margin-left:auto}
+.audit-body{overflow:auto;padding:16px 18px 20px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:1px;
+  background:var(--border);border-top:1px solid var(--border);border-bottom:1px solid var(--border);
+  margin-bottom:14px}
+.stat{background:var(--surface);padding:10px 12px}
+.stat .k{font:10.5px var(--mono);color:var(--faint);letter-spacing:.03em}
+.stat .v{font-size:18px;font-weight:600;margin-top:3px;font-variant-numeric:tabular-nums;
+  letter-spacing:-.02em}
+table.audit{width:100%;border-collapse:collapse;font-size:11.8px}
+table.audit th{text-align:left;font-weight:500;color:var(--faint);font:10.5px var(--mono);
+  letter-spacing:.04em;padding:7px 9px;border-bottom:1px solid var(--border-2);
+  background:var(--surface);position:sticky;top:0;z-index:1}
+table.audit td{padding:8px 9px;border-bottom:1px solid var(--border);vertical-align:top}
+table.audit tr:hover td{background:var(--surface-2)}
+table.audit .mono{font-family:var(--mono);font-size:10.8px;color:var(--muted)}
+.intent{font:10.5px var(--mono);padding:2px 6px;border-radius:4px;border:1px solid transparent}
+.intent.query{color:var(--primary);background:var(--primary-soft);border-color:var(--primary-line)}
+.intent.meta{color:#7c3aed;background:rgba(124,58,237,.06);border-color:rgba(124,58,237,.22)}
+.intent.refuse{color:var(--err);background:var(--err-soft);border-color:var(--err-line)}
+.intent.error{color:var(--warn);background:var(--warn-soft);border-color:var(--warn-line)}
+.audit-q{max-width:330px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+@media(max-width:860px){
+  /* 窄屏把侧栏做成抽屉：默认收走，点 ☰ 覆盖出来 */
+  .side{position:fixed;left:0;top:0;bottom:0;z-index:50;width:270px;
+    transform:translateX(-100%);transition:transform .18s ease}
+  body.side-open .side{transform:none}
+  body.side-open .side-mask{display:block;position:fixed;inset:0;
+    background:rgba(24,24,27,.28);z-index:45}
+}
+/* ---------- 图表 ---------- */
+.chart{margin:2px 0 16px}
+.chart svg{width:100%;height:auto;display:block}
+.chart .cnote{font:10px var(--mono);color:var(--faint);margin-top:4px}
+.follow-note{font-size:11.5px;color:var(--muted);border-left:2px solid var(--border-2);
+  padding:3px 10px;margin:0 0 12px}
+
+/* ---------- 看板 / ETL 弹层 ---------- */
+.board-wrap{width:100%;max-width:1020px;max-height:88vh;overflow:auto;background:var(--surface);
+  border:1px solid var(--border-2);border-radius:12px;box-shadow:0 24px 60px rgba(0,0,0,.18);
+  padding:18px 20px 22px}
+.board-head{display:flex;align-items:baseline;gap:12px;margin-bottom:14px}
+.board-head h2{margin:0;font-size:15px;font-weight:600}
+.board-head .hint{font:11px var(--mono);color:var(--faint);flex:1}
+.board-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.bcard:last-child:nth-child(odd){grid-column:1/-1}
+.bcard{border:1px solid var(--border);border-radius:10px;padding:14px 16px 12px}
+.bcard .bt{display:flex;align-items:baseline;gap:8px;margin-bottom:6px}
+.bcard .bt b{font-size:13px;font-weight:600}
+.bcard .bt .bv{margin-left:auto;font-size:19px;font-weight:600;letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums}
+.bcard .bt .bu{font:10px var(--mono);color:var(--faint)}
+.bcard .bload{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px;
+  padding:26px 0;font-family:var(--mono)}
+.bcard .berr{font-size:12px;color:var(--err);padding:20px 0}
+.etl-req{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:8px;
+  background:var(--surface);padding:10px 12px;font:13px/1.6 var(--ui);color:var(--text);
+  resize:vertical;min-height:64px;outline:none}
+.etl-req:focus{border-color:var(--border-2)}
+.etl-bar{display:flex;align-items:center;gap:12px;margin:10px 0 4px}
+.etl-bar .primary{border:0;border-radius:8px;background:var(--accent-bg);color:var(--accent-fg);
+  font-size:12.5px;font-weight:600;padding:8px 18px}
+.etl-bar .primary:disabled{opacity:.35}
+.etl-bar .cost{font:10.5px var(--mono);color:var(--faint)}
+.etl-out{margin-top:12px}
+.etl-steps{margin:10px 0 4px;padding:0 0 0 2px;list-style:none;counter-reset:etlst}
+.etl-steps li{position:relative;padding:0 0 12px 26px;counter-increment:etlst}
+.etl-steps li::before{content:counter(etlst);position:absolute;left:0;top:0;width:18px;height:18px;
+  border-radius:50%;background:var(--accent-bg);color:var(--accent-fg);
+  font:10.5px/18px var(--mono);text-align:center}
+.etl-steps li::after{content:"";position:absolute;left:9px;top:20px;bottom:2px;width:1px;background:var(--border)}
+.etl-steps li:last-child::after{display:none}
+.etl-steps b{display:block;font-size:12.5px;font-weight:600;margin-bottom:2px}
+.etl-steps span{display:block;font-size:12px;line-height:1.7;color:var(--muted);white-space:pre-wrap}
+.etl-out .ttl{font-size:13.5px;font-weight:600;margin-bottom:2px}
+.etl-out .tgt{font:11px var(--mono);color:var(--muted);margin-bottom:8px}
+.etl-checks{font-size:12px;line-height:1.9;margin:8px 0 2px}
+.etl-actions{display:flex;gap:8px;margin:12px 0 4px;flex-wrap:wrap}
+.etl-actions button{border:1px solid var(--border);border-radius:8px;padding:7px 14px;
+  font-size:12.5px;background:#fff;color:var(--text)}
+.etl-actions button.primary{background:var(--text);color:#fff;border-color:var(--text)}
+.etl-actions button:disabled{opacity:.5;cursor:default}
+.etl-sub{font-size:12px;color:var(--muted);margin:10px 0 4px;font-weight:600}
+.etl-checks .okc{color:var(--ok)} .etl-checks .badc{color:var(--err)}
+.etl-checks .warnc{color:var(--warn)}
+.etl-drift{display:flex;gap:10px;align-items:baseline;font-size:11.5px;padding:5px 0;
+  border-bottom:1px dashed var(--border);font-variant-numeric:tabular-nums}
+.etl-drift .t{font-family:var(--mono);flex:1;color:var(--text)}
+.dq-row{display:flex;gap:8px;font-size:11.5px;padding:3px 0;font-variant-numeric:tabular-nums}
+.dq-row span{margin-left:auto;color:var(--muted);font-family:var(--mono)}
+.dq-alerts{margin:8px 0;padding:8px 10px;background:var(--err-soft);border-radius:6px;font-size:12px}
+.ops-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:12px 0 8px}
+.ops-kpi{background:var(--primary-soft);border-radius:8px;padding:10px 12px}
+.ops-kpi .k{font-size:11px;color:var(--muted)}
+.ops-kpi .v{font-size:19px;font-weight:600;letter-spacing:-.02em;margin-top:2px}
+.ops-kpi .s{font-size:10.5px;color:var(--faint);font-family:var(--mono)}
+.etl-hist{border-top:1px solid var(--border);padding-top:4px}
+.etl-item{display:flex;align-items:baseline;gap:10px;padding:7px 2px;font-size:12px;
+  border-bottom:1px solid var(--surface-2)}
+.etl-item .t{font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;max-width:260px}
+.etl-item .tt{font:10.5px var(--mono);color:var(--primary);white-space:nowrap}
+.etl-item .st{font:10px var(--mono);padding:1px 6px;border-radius:4px;flex:none}
+.etl-item .st.v{background:var(--ok-soft);color:var(--ok);border:1px solid var(--ok-line)}
+.etl-item .st.g{background:var(--warn-soft);color:var(--warn);border:1px solid var(--warn-line)}
+.etl-item .tm{margin-left:auto;font:10.5px var(--mono);color:var(--faint);flex:none}
+
+/* ---------- 工作台导航（对齐企业级 DataAgent：语义层/数据源/审计回放都从这进） ---------- */
+.side-nav{padding:4px 8px 10px;border-bottom:1px solid var(--border)}
+.side-nav .nt{font:500 9.5px var(--mono);letter-spacing:.14em;color:var(--faint);
+  text-transform:uppercase;padding:8px 10px 4px}
+.nav-item{width:100%;display:flex;align-items:center;gap:9px;padding:7px 10px;
+  border:0;border-radius:6px;background:none;font-size:12.5px;color:var(--text);
+  text-align:left;transition:.12s}
+.nav-item:hover{background:var(--surface-3)}
+.nav-item .ic{width:16px;height:16px;flex:none;display:grid;place-items:center;
+  color:var(--muted)}
+.nav-item .ic svg{width:15px;height:15px;display:block}
+.nav-item .nb{margin-left:auto;font:10px var(--mono);color:var(--faint)}
+.nav-item[hidden]{display:none}
+
+/* ---------- 语义层浏览器 ---------- */
+.sem-wrap{width:100%;max-width:1080px;max-height:88vh;background:var(--surface);
+  border:1px solid var(--border-2);border-radius:12px;box-shadow:0 24px 60px rgba(0,0,0,.18);
+  display:flex;flex-direction:column;overflow:hidden}
+.sem-bar{display:flex;align-items:center;gap:10px;padding:12px 16px;
+  border-bottom:1px solid var(--border);flex-wrap:wrap}
+.sem-bar h2{margin:0;font-size:14px;font-weight:600}
+.sem-bar .hint{font:11px var(--mono);color:var(--faint)}
+.sem-search{margin-left:auto;position:relative}
+.sem-search input{width:250px;height:30px;border:1px solid var(--border);border-radius:7px;
+  background:var(--surface-2);padding:0 10px 0 28px;font-size:12.5px;outline:none;color:var(--text)}
+.sem-search input:focus{border-color:var(--border-2);background:var(--surface)}
+.sem-search svg{position:absolute;left:9px;top:8px;width:13px;height:13px;color:var(--faint)}
+.sem-tabs{display:flex;gap:2px;padding:8px 12px 0;border-bottom:1px solid var(--border);overflow-x:auto}
+.sem-tab{border:0;background:none;font-size:12.5px;color:var(--muted);padding:6px 12px;
+  border-radius:7px 7px 0 0;white-space:nowrap;border-bottom:2px solid transparent}
+.sem-tab:hover{color:var(--text)}
+.sem-tab.on{color:var(--text);font-weight:600;border-bottom-color:var(--text)}
+.sem-tab .n{font:10px var(--mono);color:var(--faint);margin-left:4px}
+.sem-body{overflow:auto;padding:12px 16px 18px}
+.sem-row{border:1px solid var(--border);border-radius:8px;margin-bottom:7px;background:var(--surface)}
+.sem-row .sh{display:flex;align-items:center;gap:9px;padding:8px 12px;cursor:pointer}
+.sem-row .sh:hover{background:var(--surface-2)}
+.sem-row .sh .code{font:500 12px var(--mono);color:var(--primary)}
+.sem-row .sh .cn{font-size:12.5px;color:var(--text)}
+.sem-row .sh .grow{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sem-row .sh .src{font:10.5px var(--mono);color:var(--faint)}
+.sem-row .sd{display:none;padding:2px 12px 10px;border-top:1px solid var(--border)}
+.sem-row.open .sd{display:block}
+.sem-row .sd pre{background:var(--code);color:var(--code-text);border-radius:5px;
+  font:11px/1.6 var(--mono);padding:8px 10px;overflow-x:auto;max-width:100%;white-space:pre-wrap;word-break:break-word}
+.sem-row .sd .kv{font-size:11.5px;color:var(--muted);line-height:1.8}
+.sem-row .sd .kv b{color:var(--faint);font:400 10.5px var(--mono)}
+.lay{font:10px var(--mono);padding:1px 6px;border-radius:4px;border:1px solid transparent;flex:none}
+.lay.dwd{color:#7c3aed;background:rgba(124,58,237,.06);border-color:rgba(124,58,237,.22)}
+.lay.dws{color:var(--primary);background:var(--primary-soft);border-color:var(--primary-line)}
+.lay.ads{color:var(--ok);background:var(--ok-soft);border-color:var(--ok-line)}
+.lay.dim{color:var(--warn);background:var(--warn-soft);border-color:var(--warn-line)}
+.lay.dev{color:var(--muted);background:var(--surface-3);border-color:var(--border-2)}
+.lay.rep{color:var(--warn);background:var(--warn-soft);border-color:var(--warn-line)}
+.lay.rej{color:var(--err);background:var(--err-soft);border-color:var(--err-line)}
+
+/* ---------- 数据源面板 ---------- */
+.src-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+.src-card{border:1px solid var(--border);border-radius:10px;padding:14px 16px 12px;background:var(--surface)}
+.src-card .ct{display:flex;align-items:center;gap:9px;margin-bottom:6px}
+.src-card .ct b{font-size:13.5px;font-weight:600}
+.src-card .ct .ty{font:10.5px var(--mono);color:var(--faint);margin-left:auto;flex:none}
+.src-card .cd{font-size:12px;color:var(--muted);line-height:1.75}
+.src-card .cd code{font:11px var(--mono);background:var(--surface-2);
+  border:1px solid var(--border);border-radius:4px;padding:1px 5px;color:var(--primary)}
+.src-card .cf{display:flex;gap:14px;margin-top:10px;padding-top:9px;
+  border-top:1px dashed var(--border);font:10.5px var(--mono);color:var(--faint)}
+.src-card .cf b{color:var(--muted);font-weight:500}
+
+/* ---------- Trace DAG（固定图 + 实际走线） ---------- */
+.dag{margin:4px 0 6px}
+.dag svg{width:100%;height:auto;display:block}
+.dag .dnode{cursor:default}
+.dag .dnode rect{fill:var(--surface);stroke:var(--border-2);stroke-width:1}
+.dag .dnode.hot rect{stroke-width:1.5}
+.dag .dnode.ok.hot rect{fill:var(--ok-soft);stroke:var(--ok)}
+.dag .dnode.err.hot rect{fill:var(--err-soft);stroke:var(--err)}
+.dag .dnode.warn.hot rect{fill:var(--warn-soft);stroke:var(--warn)}
+.dag .dnode.info.hot rect{fill:var(--primary-soft);stroke:var(--primary)}
+.dag .dnode text{font:10.5px var(--mono);fill:var(--faint)}
+.dag .dnode.hot text{fill:var(--text)}
+.dag .dnode .en{font-size:8.5px;fill:var(--faint)}
+.dag .dedge{stroke:var(--border-2);stroke-width:1.1;fill:none}
+.dag .dedge.hot{stroke:var(--primary);stroke-width:1.6}
+.dag .dedge.dash{stroke-dasharray:4 3}
+.dag .dlab{font:8.5px var(--mono);fill:var(--faint)}
+.dag-detail{background:var(--code);color:var(--code-text);border-radius:5px;
+  font:10.5px/1.6 var(--mono);padding:8px 10px;margin:6px 0 2px;max-height:220px;
+  overflow:auto;white-space:pre-wrap;word-break:break-word;display:none}
+.dag-detail.show{display:block}
+
+/* ---------- Trace 回放 ---------- */
+.trace-top{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:10px 14px;
+  border-bottom:1px solid var(--border)}
+.trace-top .tid{font:11px var(--mono);color:var(--primary)}
+.trace-grid{display:grid;grid-template-columns:1fr 260px;gap:0;overflow:hidden}
+.trace-main{padding:14px 16px 20px;overflow:auto;max-height:calc(86vh - 120px)}
+.trace-side{border-left:1px solid var(--border);padding:14px;overflow:auto;
+  max-height:calc(86vh - 120px);background:var(--surface-2)}
+.trace-side .ts{font:500 9.5px var(--mono);letter-spacing:.14em;color:var(--faint);
+  text-transform:uppercase;margin:12px 0 7px}
+.trace-side .ts:first-child{margin-top:0}
+.trace-side .kv{font-size:11.5px;color:var(--muted);line-height:1.9;word-break:break-all}
+.trace-side .kv b{color:var(--faint);font:400 10px var(--mono);display:block}
+@media(max-width:860px){.trace-grid{grid-template-columns:1fr}.trace-side{border-left:0;border-top:1px solid var(--border)}}
+
+@media(max-width:760px){
+  header{height:auto;padding:10px 14px;flex-wrap:wrap;gap:10px}
+  .hstat{margin-left:0;width:100%;gap:10px;flex-wrap:wrap}
+  .who{border-left:0;padding-left:0}
+  #messages{padding:20px 16px 4px}
+  .composer{padding:8px 14px 12px}
+  .q .txt{max-width:86%}
+  .cfoot span:first-child{display:none}
+  .empty .etitle{font-size:17px}
+  .status-pop{right:8px;width:calc(100% - 16px)}
+  .board-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<!-- 侧边栏：会话历史。新对话是懒创建——点开不落库，发出第一句才建，
+     否则点十次"新对话"就在库里留十个空壳。 -->
+<aside class="side" id="side">
+  <div class="side-head">
+    <button class="new-chat" onclick="newChat()"><span>+</span> 新对话</button>
+  </div>
+  <!-- 工作台导航：语义层 / 数据源 / 审计回放。和 DataFoundry 的
+       「统一语义 + 数据源管理 + Trace 可审计」对齐，但全部是只读视图，
+       真正的写入路径只有 ETL（且只在语义层登记后才生效）。 -->
+  <div class="side-nav" id="side-nav" hidden>
+    <div class="nt">工作台</div>
+    <button class="nav-item" onclick="toggleSem()">
+      <span class="ic"><svg viewBox="0 0 16 16" fill="none"><path d="M2 3.5h12M2 8h12M2 12.5h12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="5.5" cy="3.5" r="1.4" fill="currentColor"/><circle cx="10.5" cy="8" r="1.4" fill="currentColor"/><circle cx="6.5" cy="12.5" r="1.4" fill="currentColor"/></svg></span>
+      语义层<span class="nb" id="nav-sem-n">—</span></button>
+    <button class="nav-item" onclick="toggleSources()">
+      <span class="ic"><svg viewBox="0 0 16 16" fill="none"><ellipse cx="8" cy="3.6" rx="5.6" ry="2.1" stroke="currentColor" stroke-width="1.3"/><path d="M2.4 3.6v8.8c0 1.2 2.5 2.1 5.6 2.1s5.6-.9 5.6-2.1V3.6" stroke="currentColor" stroke-width="1.3"/><path d="M13.6 8c0 1.2-2.5 2.1-5.6 2.1S2.4 9.2 2.4 8" stroke="currentColor" stroke-width="1.3"/></svg></span>
+      数据源<span class="nb" id="nav-src-n">4</span></button>
+    <button class="nav-item" onclick="openAudit()">
+      <span class="ic"><svg viewBox="0 0 16 16" fill="none"><path d="M3 2.5h10v11H3z" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></span>
+      审计 · 回放<span class="nb">qa_logs</span></button>
+  </div>
+  <div class="side-list" id="conv-list"></div>
+  <div class="side-foot"><span id="side-count"></span></div>
+</aside>
+<div class="side-mask" id="side-mask" onclick="toggleSide(false)"></div>
+
+<main id="app">
+<header>
+  <button class="side-btn" id="side-btn" onclick="toggleSide()" title="对话历史">☰</button>
+  <div class="brand">
+    <div class="logo" id="brand-logo"></div>
+    <div>企鹅问数
+      <small id="brand-sub">Data Agent · 问数据，带上出处与复算 SQL</small></div>
+  </div>
+  <div class="hstat">
+    <span class="pill" id="pill-until"></span>
+    <span class="pill" id="pill-model"></span>
+    <button class="ghost" id="clear-btn" onclick="clearAll()" hidden>清空</button>
+    <button class="ghost" id="board-btn" onclick="toggleBoard()" hidden>看板</button>
+    <button class="ghost" id="etl-btn" onclick="toggleEtl()" hidden>ETL</button>
+    <button class="ghost" id="status-btn" onclick="toggleStatus()" hidden>状态</button>
+    <div class="who" id="who" hidden>
+      <span id="who-name">—</span>
+      <span class="role" id="who-role"></span>
+      <button class="ghost" onclick="logout()">退出</button>
+    </div>
+  </div>
+  <!-- 技术指标收在这里：主界面只留一句"数据截止"，要查细节再点开 -->
+  <div class="status-pop" id="status-pop" hidden></div>
+</header>
+
+<!-- 登录前的门：没有会话就看不到问数区，避免"页面上有入口但一提交就 401" -->
+<div class="overlay" id="login-layer">
+  <form class="login-card" onsubmit="doLogin(event)">
+    <div class="lg-logo" id="login-logo"></div>
+    <h1>企鹅问数</h1>
+    <p class="sub">下面是同一个系统的三个岗位。同一条问题，不同岗位能看到的层级与列不同；同一岗位落在不同片区，能看到的行不同。</p>
+    <div class="field">
+      <label for="u">用户名</label>
+      <input id="u" autocomplete="username" placeholder="analyst / engineer / pm" />
+    </div>
+    <div class="field">
+      <label for="p">密码</label>
+      <input id="p" type="password" autocomplete="current-password" placeholder="Demo@2026" />
+    </div>
+    <button class="primary" id="login-btn" type="submit">登录</button>
+    <div class="login-err" id="login-err" hidden></div>
+    <div class="accounts">
+      演示账号（密码均为 Demo@2026）<br>
+      <b>analyst</b> 数据分析师 · 全国　　　<b>analyst_east</b> 数据分析师 · 华东<br>
+      <b>engineer</b> 数据开发工程师 · 全国　<b>pm</b> 数据产品经理 · 全国<br>
+      <span style="opacity:.75">三个岗位全部只读；差异在可见分层、可见列与取数上限</span>
+    </div>
+  </form>
+</div>
+
+<!-- 审计：只读，数据来自 PostgreSQL 的 qa_logs（库层不可变触发器） -->
+<div class="overlay" id="audit-layer" hidden>
+  <div class="audit-wrap">
+    <div class="audit-head">
+      <h2>审计 · 最近问答</h2>
+      <span class="sub" id="audit-scope"></span>
+      <span class="spacer"></span>
+      <button class="ghost" onclick="loadAudit()">刷新</button>
+      <button class="ghost" onclick="closeAudit()">关闭</button>
+    </div>
+    <div class="audit-body">
+      <div class="stats" id="audit-stats"></div>
+      <div class="note info" id="audit-why" style="margin:10px 0 0"></div>
+      <!-- AC-14：看审计这件事本身也被记。这一行就是证据——
+           谁、什么时候、看了几行；下面还有保留期与不可变触发器的状态。 -->
+      <div class="note info" id="audit-access" style="margin:10px 0 0"></div>
+
+      <!-- 模型网关台账（AC-18/22）：审计说的是"谁问了什么"，
+           台账说的是"这次问了花了多少钱、出去过几次"。同一份证据的两端，
+           放在同一屏才对得上账。 -->
+      <div class="sub" style="margin:14px 0 6px">模型网关 · 近 24 小时</div>
+      <div class="stats" id="gw-stats"></div>
+      <div class="note info" id="gw-note" style="margin:10px 0 0"></div>
+
+      <table class="audit">
+        <thead><tr>
+          <th>时间</th><th>用户 / 角色</th><th>意图</th><th>问题</th>
+          <th>PII</th><th>表</th><th>行数</th><th>耗时</th><th>trace_id</th>
+        </tr></thead>
+        <tbody id="audit-rows"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- 经营看板：四张卡各自打一次 /api/chart，SQL 由语义层机械生成并过同一套 policy -->
+<div class="overlay" id="board-layer" hidden>
+  <div class="board-wrap">
+    <div class="board-head"><h2>经营看板 · 近 7 天</h2>
+      <span class="hint">指标取自语义层 · 行级权限与问数一致</span>
+      <button class="ghost" onclick="toggleBoard(false)">关闭</button></div>
+    <div class="board-grid" id="board-grid"></div>
+  </div>
+</div>
+
+<!-- ETL 开发：生成写入开发表（dev_）的加工 SQL。只生成与校验，不在系统内执行 -->
+<div class="overlay" id="etl-layer" hidden>
+  <div class="board-wrap">
+    <div class="board-head"><h2>ETL 开发</h2>
+      <span class="hint">生成 CREATE TABLE music_dw.dev_* AS SELECT，通过校验后可交付执行</span>
+      <button class="ghost" onclick="toggleEtl(false)">关闭</button></div>
+    <textarea id="etl-req" class="etl-req" rows="3"
+      placeholder="描述你要的加工逻辑，例如：基于会话明细建一张开发表，按天统计 DAU 和启动次数，取最近 30 天"></textarea>
+    <div class="etl-bar">
+      <button class="primary" id="etl-gen" onclick="genEtl()">生成 SQL</button>
+      <span class="cost" id="etl-cost"></span>
+    </div>
+    <div class="etl-out" id="etl-out"></div>
+    <div class="etl-hist">
+      <div class="section-title">历史生成</div>
+      <div id="etl-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 语义层浏览器：统一语义的唯一视图。数据来自 /api/semantic，
+     每次 Yaml→JSON 重新生成后这里自动是新数——没有第二份副本可以过期。 -->
+<div class="overlay" id="sem-layer" hidden>
+  <div class="sem-wrap">
+    <div class="sem-bar">
+      <h2>语义层</h2>
+      <span class="hint" id="sem-note">指标 · 表 · 维度 · 术语 · 口径规则 · 模型关系</span>
+      <div class="sem-search">
+        <svg viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 10.5 14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        <input id="sem-q" placeholder="搜索指标 / 表 / 术语…" autocomplete="off" />
+      </div>
+      <button class="ghost" onclick="toggleSem(false)">关闭</button>
+    </div>
+    <div class="sem-tabs" id="sem-tabs"></div>
+    <div class="sem-body" id="sem-body"></div>
+  </div>
+</div>
+
+<!-- 数据源面板：诚实版本——4 个真实在役的源，各有健康状态与用途，
+     不是列表页里躺着 28 个连不上的类型。 -->
+<div class="overlay" id="src-layer" hidden>
+  <div class="board-wrap" style="max-width:860px">
+    <div class="board-head"><h2>数据源</h2>
+      <span class="hint">执行面 · 只读账号 · 凭证不进上下文（AC-21）</span>
+      <button class="ghost" onclick="toggleSources(false)">关闭</button></div>
+    <div class="src-grid" id="src-grid"></div>
+  </div>
+</div>
+
+<!-- Trace 回放：审计表里点 trace_id 打开。整条运行记录（节点事件、护栏结论、
+     SQL 演化、机械修复）按 trace_id 从 qa_logs 取回， DAG 复盘这一轮怎么走的。 -->
+<div class="overlay" id="trace-layer" hidden>
+  <div class="sem-wrap" style="max-width:1180px">
+    <div class="trace-top">
+      <h2 style="margin:0;font-size:14px;font-weight:600">Trace 回放</h2>
+      <span class="tid" id="tr-tid"></span>
+      <span class="hint" id="tr-when" style="font:11px var(--mono);color:var(--faint)"></span>
+      <span class="spacer" style="margin-left:auto"></span>
+      <button class="ghost" onclick="toggleTraceView(false)">关闭</button>
+    </div>
+    <div class="trace-grid">
+      <div class="trace-main" id="tr-main"></div>
+      <div class="trace-side" id="tr-side"></div>
+    </div>
+  </div>
+</div>
+
+  <div id="messages">
+    <div class="empty" id="empty"></div>
+  </div>
+  <div class="composer">
+    <div class="cbox">
+      <textarea id="q" rows="1" autocomplete="off"
+        placeholder="问一个业务问题，例如：2026-11-08 的 DAU 是多少"></textarea>
+      <button id="send" onclick="send()" title="发送（Enter）" aria-label="发送">
+        <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M8 13.2V3.2M8 3.2 3.4 7.8M8 3.2l4.6 4.6" stroke="currentColor"
+                stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
+    <div class="cfoot">
+      <span>Enter 发送 · Shift+Enter 换行</span>
+      <span>答案附带出处与复算 SQL</span>
+    </div>
+  </div>
+</main>
+
+<script>
+/* 企鹅：整个界面唯一的"形象"。纯内联 SVG 画，不依赖图片文件——
+   换尺寸不失真，离线也能显示，配色跟着浅色主题走。 */
+/* 企鹅：整个界面唯一的"形象"。纯内联 SVG 画，不依赖图片文件——
+   换尺寸不失真，离线也能显示，配色跟着浅色主题走。
+   戴草帽、系红围巾：帽檐压在头顶上缘，围巾贴着前胸的弧线，
+   两者都留出了眼睛和嘴的位置，缩到 25px 仍然认得出。 */
+const PENGUIN = `<svg viewBox="0 0 40 40" aria-hidden="true">
+  <ellipse cx="20" cy="21.4" rx="12.6" ry="14" fill="#242835"/>
+  <ellipse cx="20" cy="25.2" rx="8.3" ry="9.8" fill="#ffffff"/>
+  <ellipse cx="7.7" cy="21" rx="2.3" ry="5.4" fill="#1b1e28" transform="rotate(-11 7.7 21)"/>
+  <ellipse cx="32.3" cy="21" rx="2.3" ry="5.4" fill="#1b1e28" transform="rotate(11 32.3 21)"/>
+  <circle cx="15.7" cy="16.4" r="3" fill="#ffffff"/>
+  <circle cx="24.3" cy="16.4" r="3" fill="#ffffff"/>
+  <circle cx="16" cy="16.8" r="1.25" fill="#242835"/>
+  <circle cx="24" cy="16.8" r="1.25" fill="#242835"/>
+  <circle cx="16.6" cy="16" r=".46" fill="#ffffff"/>
+  <circle cx="24.6" cy="16" r=".46" fill="#ffffff"/>
+  <path d="M20 20.4 22.9 22.7 20 25 17.1 22.7Z" fill="#f7a11a"/>
+  <ellipse cx="15.6" cy="36" rx="3.2" ry="1.9" fill="#f7a11a"/>
+  <ellipse cx="24.4" cy="36" rx="3.2" ry="1.9" fill="#f7a11a"/>
+  <!-- 草帽：帽檐 + 帽冠 + 一圈细红缎带 -->
+  <ellipse cx="20" cy="9.3" rx="13.6" ry="2.5" fill="#dfae66"/>
+  <ellipse cx="20" cy="8.9" rx="13.6" ry="2.2" fill="#ecc583"/>
+  <path d="M12.7 9 q0.7-6.1 7.3-6.1 6.6 0 7.3 6.1z" fill="#ecc583"/>
+  <path d="M14.1 6.3h11.8M15.2 4.6h9.6" stroke="#d6a75e" stroke-width=".45" opacity=".75"/>
+  <path d="M12.7 8.2q7.3 1.7 14.6 0l0 1.1q-7.3 1.7-14.6 0z" fill="#d94b3b"/>
+  <!-- 红围巾：贴前胸弧线绕一圈，右侧垂下一小段 -->
+  <path d="M8.8 26.4q11.2 3.5 22.4 0l0 3.5q-11.2 3.6-22.4 0z" fill="#d94b3b"/>
+  <path d="M9.4 27.9q10.6 3.2 21.2 0" stroke="#b53232" stroke-width=".5" fill="none" opacity=".5"/>
+  <path d="M28.7 29.2q3.1.2 2.8 3.1l-.5 2.8q-2.2-1.5-2.9-3.3z" fill="#c33a3a"/>
+</svg>`;
+
+/* 助手这条回答：头像 + 内容。等待态和答案态用同一个外壳，避免答案出来时整块跳动。 */
+function wrapAnswer(inner){
+  return `<div class="a"><div class="av">${PENGUIN}</div><div class="abody">${inner}</div></div>`;
+}
+
+const QUICK = [
+  ["你能做什么",""],
+  ["2026-11-08 的 DAU 是多少",""],
+  ["最近7天的播放量",""],
+  ["上个月各省份的活跃用户数",""],
+  ["11-08 各省份活跃用户数",""],
+  ["11-08 收入金额",""],
+  ["今天 DAU 多少","refuse"],
+  ["2026-12-01 的播放量","refuse"]
+];
+const $ = s => document.querySelector(s);
+// 数据范围的显示名。新增片区时在这里补一行即可，权限本身由后端 scope_policies 决定。
+const REGION_CN = { all: "全国", east: "华东" };
+let busy = false;
+
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function fmt(v){
+  if(v===null||v===undefined) return "NULL";
+  if(typeof v==="number") return Number.isInteger(v)?v.toLocaleString("zh-CN"):String(+v.toFixed(4));
+  return esc(v);
+}
+/* 空态：一句标题、一句说明、几个示例问题。
+   示例问题挂在空态里而不是常驻工具条——问过一轮之后它们就没用了，
+   留着只占地方。 */
+function emptyHTML(){
+  const chips = QUICK.map(([q,c])=>
+    `<button class="chip ${c}" onclick="ask('${esc(q)}')">${esc(q)}</button>`).join("");
+  return `<div class="empty" id="empty">
+    <div class="etitle">问一个业务问题</div>
+    <div class="esub">回答会带上<b>时间窗口、数据源、命中口径</b>和可复算的 SQL<br>
+      需要排查时，答案下方能展开「执行过程」</div>
+    <div class="quick">${chips}</div>
+  </div>`;
+}
+function autoGrow(el){
+  el.style.height = "auto";
+  el.style.height = Math.min(el.scrollHeight, 168) + "px";
+}
+function init(){
+  $("#brand-logo").innerHTML = PENGUIN;
+  const lg = $("#login-logo"); if(lg) lg.innerHTML = PENGUIN;
+  $("#empty") && ($("#empty").outerHTML = emptyHTML());
+  fetch("/api/meta").then(r=>r.json()).then(m=>{
+    document.getElementById("pill-until").innerHTML =
+      `<i class="dot"></i>数据截止 ${esc(m.data_until)}`;
+    document.getElementById("pill-model").innerHTML =
+      `<i class="dot amber"></i>${esc(m.model)}`;
+    STATUS.catalog = `${m.catalog}.${m.database}`;
+    STATUS.guards = m.guards;
+    renderStatus();
+  }).catch(()=>{});
+  // isComposing：中文输入法里按回车是选词，不是发送
+  $("#q").addEventListener("keydown",e=>{
+    if(e.isComposing || e.keyCode === 229) return;
+    if(e.key === "Enter" && !e.shiftKey){ e.preventDefault(); if(!busy) send() }
+  });
+  $("#q").addEventListener("input",e=>autoGrow(e.target));
+  // 语义层搜索：边输边过滤，数据在本地缓存里，不需要防抖
+  const semq=$("#sem-q");
+  if(semq) semq.addEventListener("input",e=>{ SEM_Q=e.target.value; if(SEM) renderSem(); });
+  try{ if(localStorage.getItem("da-side")==="off") document.body.classList.add("side-hidden") }catch(e){}
+  document.addEventListener("click",e=>{
+    const pop=$("#status-pop");
+    if(pop && !pop.hidden && !e.target.closest("#status-pop") && !e.target.closest("#status-btn"))
+      pop.hidden = true;
+  });
+}
+/* 技术指标（缓存后端、网关开销、出网拦截）不该摆在主界面上，
+   但也不能消失：收进一个可以点开的小浮层。 */
+const STATUS = {catalog:"", guards:"", cache:null, gw:null};
+function toggleStatus(){
+  const pop=$("#status-pop");
+  pop.hidden = !pop.hidden;
+  if(!pop.hidden){ refreshCacheStatus(); refreshGatewayStatus(); }
+}
+function srow(k,v,cls){
+  return `<div class="srow"><span class="k">${esc(k)}</span>
+    <span class="v"><i class="dot ${cls||"gray"}" style="display:inline-block;margin-right:5px"></i>${v}</span></div>`;
+}
+function renderStatus(){
+  const pop=$("#status-pop"); if(!pop || pop.hidden) return;
+  const c=STATUS.cache, g=STATUS.gw, eg=(g&&g.egress)||{};
+  let h="";
+  if(STATUS.catalog) h+=srow("数据源", esc(STATUS.catalog), "blue");
+  if(STATUS.guards) h+=srow("护栏", `${esc(STATUS.guards)} 条`, "ok");
+  if(c){
+    h+=`<div class="sep"></div>`;
+    h+= c.degraded
+      ? srow("缓存", `已降级 · ${esc(c.backend||"local")}`, "red")
+      : srow("缓存", `${esc(c.backend)} · 命中 ${c.hit_rate==null?0:c.hit_rate}%`, "ok");
+  }
+  if(g){
+    const t=(g.ledger&&g.ledger.total)||{};
+    h+=`<div class="sep"></div>`;
+    h+= srow("模型调用", `${t.calls||0} 次 · ¥${(t.cost_cny||0).toFixed(4)}`, "blue");
+    h+= srow("出网", eg.blocked>0 ? `拦截 ${eg.blocked} 次` : `${(eg.allow_hosts||[]).join("、")||"—"}`,
+             eg.blocked>0 ? "red" : "gray");
+  }
+  h+=`<div class="sep"></div>
+    <div class="srow"><span class="k">入口</span><span class="v">
+      <a href="javascript:openAudit()">审计明细</a> ·
+      <a href="/eval-history" target="_blank" rel="noopener">评测看板</a></span></div>`;
+  pop.innerHTML = h || `<div class="srow"><span class="k">状态</span><span class="v">加载中…</span></div>`;
+}
+
+/* ---------------- 身份 ---------------- */
+let ME = null;
+function showLogin(msg){
+  $("#login-layer").hidden = false;
+  $("#who").hidden = true;
+  const e=$("#login-err");
+  if(msg){e.textContent=msg;e.hidden=false}else{e.hidden=true}
+  setTimeout(()=>$("#u").focus(),60);
+}
+function hideLogin(){
+  $("#login-layer").hidden = true;
+  $("#who").hidden = false;
+}
+function boot(){
+  init();
+  fetch("/api/me").then(r=>{
+    if(r.status===401){ showLogin(""); return null }
+    return r.json();
+  }).then(d=>{
+    if(!d) return;
+    ME=d;
+    $("#who-name").textContent = d.user.display_name || d.user.username;
+    // 展示"岗位 · 数据范围"，而不是内部角色码——用户看到的词应该和公司里的岗位名一致
+    const scope = d.user.scope_region && d.user.scope_region !== "all"
+      ? (REGION_CN[d.user.scope_region] || d.user.scope_region) : "";
+    $("#who-role").textContent = (d.user.role_name || d.user.role) + (scope ? " · " + scope : "");
+    $("#who-role").title = (d.user.role_description || "") +
+      (d.policy && d.policy.read_only ? "｜只读" : "");
+    hideLogin();
+    $("#status-btn").hidden = false;
+    $("#board-btn").hidden = false;
+    $("#side-nav").hidden = false;   // 工作台导航：语义层 / 数据源 / 审计回放
+    // ETL 是开发动作，只对数据开发工程师开放—— analyst/pm 点了也会被 403，藏掉更诚实
+    if(d.user && d.user.role === "data_engineer") $("#etl-btn").hidden = false;
+    loadConvs();
+    refreshCacheStatus();
+    refreshGatewayStatus();
+  }).catch(()=>showLogin("无法连接服务，确认 webapp.py 在运行"));
+}
+/* 缓存后端状态：Redis 还是进程内、有没有降级。
+   降级必须在界面上看得见——静默回落 local 时，"以为共享了其实各存一份"
+   在演示里完全看不出来，在生产上就是缓存穿透。
+   只是这个"看得见"放在状态浮层里，不占主界面的位置。 */
+function refreshCacheStatus(){
+  fetch("/api/cache").then(r=>r.ok?r.json():null).then(d=>{
+    if(!d) return;
+    STATUS.cache = d.cache||{};
+    renderStatus();
+  }).catch(()=>{});
+}
+/* 网关：今日调用量与成本，出网被拦时标红。
+   "闸装了但从没拦过"和"闸装了个寂寞"在界面上长得一样，所以这里要显示
+   真实计数——0 就是 0，不去猜。 */
+function refreshGatewayStatus(){
+  fetch("/api/gateway?days=1").then(r=>r.ok?r.json():null).then(d=>{
+    if(!d) return;
+    STATUS.gw = d;
+    renderStatus();
+  }).catch(()=>{});
+}
+/* 审计弹窗里的网关那一块：和上面的问答统计对着看，才能对得上账。 */
+function renderGateway(g, box, note){
+  if(!g||!box){return}
+  const t=(g.ledger&&g.ledger.total)||{}, eg=g.egress||{}, lim=g.limits||{};
+  box.innerHTML = statCard("模型调用",t.calls||0)+statCard("失败",t.failed||0)+
+    statCard("缓存命中",t.cached||0)+
+    statCard("平均延迟",(t.avg_latency_ms||0)+" ms")+
+    statCard("成本",`¥${(t.cost_cny||0).toFixed(4)}`)+
+    statCard("出网拦截",eg.blocked||0);
+  const parts=[];
+  parts.push(eg.installed
+    ? `出网闸已启用，白名单：${(eg.allow_hosts||[]).join("、")||"无"}`
+    : `出网闸未启用${eg.reason?"（"+eg.reason+"）":""}`);
+  if(eg.via_proxy) parts.push(`经代理出网 ${eg.via_proxy} 次`);
+  parts.push(`限流 ${lim.max_calls_per_min?lim.max_calls_per_min+" 次/分":"不限"} · 日预算 ${lim.daily_cost_cny?"¥"+lim.daily_cost_cny:"不限"}`);
+  if(g.ledger&&g.ledger.ok===false) parts.push("台账查询失败："+(g.ledger.error||""));
+  note.textContent = parts.join("　｜　");
+  note.classList.toggle("warn", !!(g.ledger&&g.ledger.ok===false));
+}
+function doLogin(ev){
+  ev.preventDefault();
+  const btn=$("#login-btn"), err=$("#login-err");
+  const username=$("#u").value.trim(), password=$("#p").value;
+  if(!username||!password){err.textContent="用户名和密码都要填";err.hidden=false;return}
+  btn.disabled=true; err.hidden=true;
+  fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({username,password})})
+    .then(async r=>{
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error(d.detail||d.error||("登录失败 "+r.status));
+      return d;
+    })
+    .then(()=>{ $("#p").value=""; boot(); })
+    .catch(e=>{err.textContent=e.message;err.hidden=false})
+    .finally(()=>{btn.disabled=false});
+}
+function logout(){
+  fetch("/api/logout",{method:"POST"}).then(()=>{
+    ME=null;
+    CUR=null; CONVS=[]; renderConvs();
+    PENDING_HITL=null;
+    $("#messages").innerHTML = emptyHTML();
+    $("#clear-btn").hidden = true;
+    $("#side-nav").hidden = true;
+    showLogin("");
+  });
+}
+
+/* ---------------- 审计 ---------------- */
+function openAudit(){
+  $("#audit-layer").hidden=false;
+  loadAudit();
+}
+function closeAudit(){ $("#audit-layer").hidden=true }
+function loadAudit(){
+  $("#audit-rows").innerHTML=`<tr><td colspan="9" style="color:var(--faint)">加载中…</td></tr>`;
+  Promise.all([
+    fetch("/api/audit?limit=50").then(r=>r.json()),
+    // 403 也要取回 body：{detail:"无权限查看全局统计"} 是给用户看的说明，
+    // 若按 r.ok 丢掉，普通岗位看到的就是一块静默空白。
+    fetch("/api/stats?days=1").then(r=>r.json().catch(()=>null)).catch(()=>null),
+    fetch("/api/gateway?days=1").then(r=>r.ok?r.json():null).catch(()=>null),
+    fetch("/api/audit/access?limit=5").then(r=>r.ok?r.json():null).catch(()=>null),
+    fetch("/api/audit/retention").then(r=>r.ok?r.json():null).catch(()=>null)
+  ]).then(([a,s,g,acc,ret])=>{
+    $("#audit-scope").textContent = a.scope==="all"
+      ? "范围：全租户（分析师权限）" : "范围：仅本人记录";
+    // detail 是"无权限查看全局统计"这类说明，不是统计数据：
+    // 不挡掉的话上面会渲染出一排键全是空值的统计卡。
+    if(s && !s.error && !s.detail){
+      // 成本与 P95 是阶段 2 才真正有数的：tokens 之前恒为 0，
+      // 因为审计侧在 trace.data 里找的键名和生成节点写的对不上。
+      const cost = (s.cost_cny||0).toFixed(4);
+      const per = (s.cost_per_query||0).toFixed(4);
+      $("#audit-stats").innerHTML =
+        statCard("近 24h 问答",s.total)+statCard("成功率",(s.success_rate||0)+"%" )+
+        statCard("拒答",s.refused)+statCard("P95 耗时",(s.p95_ms||0)+" ms")+
+        statCard("tokens",((s.tokens_in||0)+(s.tokens_out||0)).toLocaleString())+
+        statCard("成本",`¥${cost}（¥${per}/次）`);
+      const tops = s.top_refusals||[];
+      const whyEl = $("#audit-why");
+      if (tops.length) {
+        whyEl.innerHTML = "主要拒答原因：" + tops.map(t=>
+          `${esc((t.reason||"").replace(/\s+/g," ").slice(0,26))} ×${t.n}`).join("　｜　");
+        whyEl.hidden = false;
+      } else {
+        // 没有拒答时不能留一条空壳提示条：空 note 也占一行，看着像渲染坏了。
+        whyEl.innerHTML = ""; whyEl.hidden = true;
+      }
+    } else {
+      // stats 挂了也不能让 audit-why 留一条空壳蓝条（初始 DOM 未 hidden）。
+      $("#audit-why").hidden = true;
+      $("#audit-stats").innerHTML = s&&s.detail
+        ? `<div class="note info" style="margin:0">${esc(s.detail)}</div>` : "";
+    }
+    renderGateway(g, $("#gw-stats"), $("#gw-note"));
+
+    // AC-14：这次查询本身有没有被记上 + 谁看过审计 + 保留期状态。
+    // 记失败时明确写出来：静默失败等于"以为记了"。
+    const accRows = (acc && acc.rows) || [];
+    const rt = ret && ret.plan;
+    const bits = [];
+    if (a.access_logged === false) {
+      bits.push(`<span style="color:var(--err)">本次访问未能写入审计访问表：`
+        + `${esc(a.access_error || "未知原因")}</span>`);
+    }
+    bits.push(accRows.length
+      ? "最近查看审计：" + accRows.map(x =>
+          `${esc((x.occurred_at || "").replace("T", " ").slice(5, 16))} `
+          + `${esc(x.user_id)}（${esc(x.action)}${x.rows ? " " + x.rows + " 行" : ""}）`
+        ).join("　｜　")
+      : "还没有其他查看记录。");
+    if (rt) {
+      bits.push(`保留期 ${ret.days} 天：当前将归档 ${rt.rows || 0} 行；`
+        + `不可变触发器${ret.trigger_enabled ? "在岗" : "<span style=\"color:var(--err)\">已关闭（异常）</span>"}`);
+    }
+    $("#audit-access").innerHTML = bits.join("<br>");
+    const rows=a.rows||[];
+    if(!rows.length){
+      $("#audit-rows").innerHTML=`<tr><td colspan="9" style="color:var(--faint)">还没有审计记录。</td></tr>`;
+      return;
+    }
+    $("#audit-rows").innerHTML = rows.map(r=>{
+      const t=(r.occurred_at||"").replace("T"," ").slice(0,19);
+      const tabs=(r.tables||[]).join("、");
+      return `<tr>
+        <td class="mono">${esc(t)}</td>
+        <td>${esc(r.user_id||"—")}<br><span class="mono">${esc(r.role||"")}</span></td>
+        <td><span class="intent ${esc(r.intent)}">${esc(r.intent)}</span></td>
+        <td class="audit-q" title="${esc(r.question||"")}">${esc(r.question||"")}</td>
+        <td>${r.pii_hits
+          ? `<span style="font-size:11px;color:var(--warn)">脱敏 ${r.pii_hits} 处</span>`
+          : "—"}</td>
+        <td class="mono">${esc(tabs||"—")}</td>
+        <td>${r.row_count||0}</td>
+        <td class="mono">${r.elapsed_ms||0} ms</td>
+        <td class="mono">${r.trace_id
+          ? `<a href="javascript:openTrace('${esc(r.trace_id)}')" title="回放这条运行记录">${esc(r.trace_id.slice(-13))} ↗</a>`
+          : "—"}</td>
+      </tr>`;
+    }).join("");
+  }).catch(e=>{
+    $("#audit-rows").innerHTML=`<tr><td colspan="9" style="color:var(--err)">读取失败：${esc(e.message)}</td></tr>`;
+  });
+}
+function statCard(k,v){return `<div class="stat"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div></div>`}
+
+function ask(q){$("#q").value=q;send()}
+function clearAll(){ newChat() }
+
+/* ---------------- 会话历史 ---------------- */
+let CUR = null;          // 当前会话 id；null = 还没发过言的新对话
+let CONVS = [];          // 侧栏列表
+// HITL（P1-2）：图停在 plan 等澄清时，下一句不是新问题而是「恢复」。
+// 存 thread_id 与当时的会话；null = 没有待恢复的问答。
+let PENDING_HITL = null;
+
+function relTime(iso){
+  if(!iso) return "";
+  const d = new Date(iso), now = new Date();
+  const diff = (now - d) / 1000;
+  if(diff < 60) return "刚刚";
+  if(diff < 3600) return Math.floor(diff/60) + " 分钟前";
+  if(d.toDateString() === now.toDateString()) return d.toTimeString().slice(0,5);
+  const y = new Date(now); y.setDate(now.getDate()-1);
+  if(d.toDateString() === y.toDateString()) return "昨天";
+  return (d.getMonth()+1) + "-" + String(d.getDate()).padStart(2,"0");
+}
+function toggleSide(force){
+  // 宽屏是整条收起，窄屏是从左侧滑出——两种模式共用同一个按钮
+  if(innerWidth <= 860){
+    const open = force===undefined ? !document.body.classList.contains("side-open") : force;
+    document.body.classList.toggle("side-open", open);
+  }else{
+    const show = force===undefined ? document.body.classList.contains("side-hidden") : force;
+    document.body.classList.toggle("side-hidden", !show);
+    try{localStorage.setItem("da-side", show ? "on" : "off")}catch(e){}
+  }
+}
+function loadConvs(){
+  fetch("/api/conversations").then(r=>r.ok?r.json():null).then(d=>{
+    if(!d) return;
+    CONVS = d.rows || [];
+    renderConvs();
+  }).catch(()=>{});
+}
+function renderConvs(){
+  const box = $("#conv-list");
+  if(!box) return;
+  if(!CONVS.length){
+    box.innerHTML = `<div class="conv-empty">还没有对话<br>问一句就会在这里留一条</div>`;
+    $("#side-count").textContent = "";
+    return;
+  }
+  box.innerHTML = CONVS.map(c=>{
+    const t = esc(c.title || "新对话");
+    return `<div class="conv ${c.conv_id===CUR?"active":""}" onclick="openConv('${c.conv_id}')">
+      <div class="ct" title="${t}">${t}</div>
+      <div class="cm">${relTime(c.updated_at)} · ${c.msg_count} 条</div>
+      <button class="cdel" title="删除这段对话（审计记录不受影响）"
+        onclick="event.stopPropagation();delConv('${c.conv_id}')">×</button>
+    </div>`;
+  }).join("");
+  $("#side-count").textContent = `${CONVS.length} 段对话`;
+}
+function newChat(){
+  CUR = null;
+  PENDING_HITL = null;
+  if($("#q")){ $("#q").value = ""; $("#q").placeholder = "问一个业务问题，例如：2026-11-08 的 DAU 是多少"; autoGrow($("#q")) }
+  $("#clear-btn").hidden = true;
+  $("#messages").innerHTML = emptyHTML();
+  renderConvs();
+  if(innerWidth <= 860) toggleSide(false);
+  $("#q").focus();
+}
+function openConv(id){
+  if(busy || id === CUR) { if(innerWidth<=860) toggleSide(false); return }
+  fetch(`/api/conversations/${id}`).then(r=>{
+    if(!r.ok) throw new Error("这段对话不存在或已删除");
+    return r.json();
+  }).then(d=>{
+    CUR = id;
+    // 切会话就不再有"待澄清"：那个 thread 属于上一段对话，
+    // 在这里恢复等于把别人的问题接着问下去。
+    PENDING_HITL = null;
+    $("#q").placeholder = "问一个业务问题，例如：2026-11-08 的 DAU 是多少";
+    renderConvs();
+    const turns = d.turns || [];
+    if(!turns.length){ $("#messages").innerHTML = emptyHTML(); return }
+    $("#messages").innerHTML = turns.map(t=>`
+      <div class="msg">
+        <div class="q"><div class="txt">${esc(t.question)}</div></div>
+        ${wrapAnswer(t.answer ? renderAnswer(t.answer) : `<div class="note">这一轮没有生成答案。</div>`)}
+      </div>`).join("");
+    $("#clear-btn").hidden = false;
+    $("#messages").scrollTop = $("#messages").scrollHeight;
+    if(innerWidth <= 860) toggleSide(false);
+  }).catch(()=>{ loadConvs(); toast("这段对话已经不存在了"); });
+}
+function delConv(id){
+  if(!confirm("删除这段对话？\n\n只删聊天记录，审计里的问答事件不受影响。")) return;
+  fetch(`/api/conversations/${id}`, {method:"DELETE"}).then(r=>{
+    if(!r.ok) throw new Error("删除失败");
+    if(CUR === id) newChat(); else loadConvs();
+  }).catch(e=>toast(e.message || "删除失败"));
+}
+/* 轻提示：不打断操作，2 秒后自己走 */
+function toast(msg){
+  let el = $("#toast");
+  if(!el){
+    el = document.createElement("div");
+    el.id = "toast";
+    el.style.cssText = "position:fixed;left:50%;bottom:96px;transform:translateX(-50%);"
+      + "background:#18181b;color:#fff;font-size:12.5px;padding:8px 14px;border-radius:7px;"
+      + "z-index:80;box-shadow:0 8px 24px rgba(0,0,0,.18);opacity:0;transition:opacity .15s";
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.style.opacity = "1";
+  clearTimeout(el._t);
+  el._t = setTimeout(()=>{ el.style.opacity = "0" }, 2000);
+}
+/* ============================================================
+   工作台三大件（对齐企业级 DataAgent）：
+   语义层浏览器 / 数据源面板 / Trace DAG 与回放
+   ============================================================ */
+
+/* ---------------- Trace DAG：固定图 + 实际走线 ----------------
+   我们的执行拓扑是 LangGraph 固定图 + 条件边，所以 DAG 可以画成
+   「骨架恒定、按 trace 高亮实际路径」——这正是可审计的卖点：
+   每一轮走的哪条边是可指认的，不存在 ReAct 那种不可复现路径。 */
+const DAG_NODES = {
+  route:   {cn:"路由",     en:"route",    x:10,  y:92},
+  meta:    {cn:"元问题",   en:"meta",     x:10,  y:14},
+  generate:{cn:"生成",     en:"generate", x:150, y:92},
+  react:   {cn:"ReAct旁路",en:"react",    x:150, y:170},
+  validate:{cn:"护栏校验", en:"validate", x:290, y:92},
+  execute: {cn:"执行",     en:"execute",  x:430, y:92},
+  critique:{cn:"形态返工", en:"critique", x:570, y:92},
+  refuse:  {cn:"拒答",     en:"refuse",   x:290, y:170},
+  narrate: {cn:"作答",     en:"narrate",  x:430, y:170},
+};
+const DAG_W = 96, DAG_H = 32;
+const DAG_PATHS = {
+  "route>generate":     "M106,108 L150,108",           // 主链：route 右缘 → generate 左缘
+  "generate>validate":  "M246,108 L290,108",
+  "validate>execute":   "M386,108 L430,108",
+  "execute>critique":   "M526,108 L570,108",
+  "critique>narrate":   "M618,124 Q600,170 526,186",   // critique 下缘 → narrate 右缘
+  "route>meta":         "M58,92 L58,46",               // route 上缘 → meta 下缘
+  "meta>narrate":       "M106,30 L540,30 Q560,120 478,170", // 顶部通道横穿，从 execute/critique 缝隙下来
+  "route>refuse":       "M58,124 Q230,150 290,186",    // route 下缘 → refuse 左缘
+  "refuse>narrate":     "M386,186 L430,186",
+  "route>react":        "M58,124 Q120,160 198,170",    // route 下缘 → react 顶缘
+  "react>validate":     "M246,186 Q290,140 338,124",   // react 右缘 → validate 下缘
+  "validate>generate":  "M338,92 Q292,64 246,92",      // REJECT 返工回边：走盒子上方
+};
+const DAG_EDGES = Object.keys(DAG_PATHS);
+function traceDAG(st){
+  const evs = st.trace||[];
+  const seen = {}; evs.forEach(e=>{ seen[e.node]=(seen[e.node]||0)+1; (seen._e=seen._e||{})[e.node]=e; });
+  // 实际事件按节点存（同节点多版本时取最后一次）
+  const evMap = {}; evs.forEach(e=>{ evMap[e.node]=e; });
+  const rework = (st.fix_log||[]).length>0 ||
+    (st.history||[]).some(x=>/reject/i.test(x.verdict||""));
+  const nodeCls = k => {
+    if(!seen[k]) return "";
+    const e=evMap[k]||{};
+    return (classOf(k, e.detail)+" hot");
+  };
+  // 节点下的小注释：generate 的 token、validate 的修复数、execute 的行数
+  const tagOf = k => {
+    const e=evMap[k]; if(!e || !e.data) return "";
+    const d=e.data;
+    if(k==="generate"){
+      const t=(d.tokens_in||0)+(d.tokens_out||0);
+      return t? t+" tok" : "";
+    }
+    if(k==="validate"){
+      const fx=(d.fixes||[]).length, fj=(d.findings||[]).length;
+      return [fx?("修复 "+fx):"", fj?("发现 "+jCount(fj)):""].filter(x=>x).join(" · ");
+    }
+    if(k==="execute") return d.row_count!=null ? fmt(d.row_count)+" 行" : "";
+    if(k==="critique"){
+      const s=d.shape;
+      if(!s) return "";
+      if(typeof s==="string") return esc(s);
+      return esc(String(s.label||s.kind||s.shape||"")) || esc(JSON.stringify(s).slice(0,18));
+    }
+    if(k==="route") return d.lane? esc(String(d.lane)) : "";
+    return "";
+  };
+  function jCount(n){ return n>=1000 ? (n/1000).toFixed(1)+"k" : String(n); }
+  let g="";
+  // 边：两端节点都实际执行过才高亮；返工回边看 fix_log / REJECT 记录
+  DAG_EDGES.forEach(key=>{
+    const [a,b]=key.split(">");
+    const isRework = key==="validate>generate";
+    const hot = isRework ? rework : !!(seen[a]&&seen[b]);
+    g+=`<path class="dedge ${hot?"hot":""} ${isRework?"dash":""}" d="${DAG_PATHS[key]}" marker-end="url(#dagarrow${hot?"h":""})"/>`;
+  });
+  // 节点
+  Object.entries(DAG_NODES).forEach(([k,n])=>{
+    const cls=nodeCls(k), e=evMap[k]||{};
+    const tag=tagOf(k);
+    const dataStr = e.data && Object.keys(e.data).length ? JSON.stringify(e.data,null,1) : "";
+    g+=`<g class="dnode ${cls}" data-data="${esc(dataStr)}" onclick="dagToggle(this)">
+      <rect x="${n.x}" y="${n.y}" width="${DAG_W}" height="${DAG_H}" rx="6"/>
+      <text x="${n.x+DAG_W/2}" y="${n.y+13}" text-anchor="middle">${esc(n.cn)}</text>
+      <text class="en" x="${n.x+DAG_W/2}" y="${n.y+24}" text-anchor="middle">${esc(n.en)}</text>
+      ${tag?`<text class="en" x="${n.x+DAG_W/2}" y="${n.y+DAG_H+10}" text-anchor="middle" fill="var(--faint)">${tag}</text>`:""}
+    </g>`;
+  });
+  const lab=`<text class="dlab" x="115" y="10">元问题分支直接作答；拒答 / ReAct 旁路为条件边</text>
+    <text class="dlab" x="10" y="205">点节点展开该步证据 · 虚线回边 = REJECT 后机械修复 / 重写</text>`;
+  return `<div class="dag"><svg viewBox="0 0 676 212" role="img">
+    <defs>
+      <marker id="dagarrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto">
+        <path d="M0,0 L8,4 L0,8 z" fill="#d6d6d2"/></marker>
+      <marker id="dagarrowh" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto">
+        <path d="M0,0 L8,4 L0,8 z" fill="#2563eb"/></marker>
+    </defs>${g}${lab}</svg>
+    <div class="dag-detail"></div></div>`;
+}
+function dagToggle(g){
+  const box=g.closest(".dag").querySelector(".dag-detail");
+  const d=g.dataset.data||"";
+  if(box.textContent===d && box.classList.contains("show")){ box.classList.remove("show"); return; }
+  if(!d){ box.textContent="（这一步没有留下结构化数据）"; }
+  else box.textContent=d;
+  box.classList.add("show");
+}
+
+/* ---------------- 语义层浏览器 ---------------- */
+let SEM=null, SEM_TAB="metrics", SEM_Q="";
+function toggleSem(force){
+  const l=$("#sem-layer");
+  const show = force!==undefined ? force : l.hidden;
+  l.hidden=!show;
+  if(show) openSemantic();
+}
+function openSemantic(){
+  if(SEM){ renderSem(); return; }
+  fetch("/api/semantic").then(r=>r.ok?r.json():Promise.reject(new Error("读取失败 "+r.status)))
+    .then(d=>{ SEM=d; renderSem(); })
+    .catch(e=>{ $("#sem-body").innerHTML=`<div class="berr">${esc(e.message)}</div>`; });
+}
+function renderSem(){
+  if(!SEM) return;
+  const c=SEM.counts||{};
+  $("#nav-sem-n").textContent=`${c.metrics||0}指标 · ${c.tables||0}表`;
+  $("#sem-note").textContent=SEM.note||"";
+  const tabs=[
+    ["metrics",`指标`,c.metrics],["tables",`表`,c.tables],
+    ["dimensions",`维度`,c.dimensions],["terms",`术语`,c.terms],
+    ["caliber",`口径规则`,c.caliber],["relationships",`模型关系`,(SEM.relationships||[]).length],
+  ];
+  $("#sem-tabs").innerHTML=tabs.map(([k,n,cnt])=>
+    `<button class="sem-tab ${k===SEM_TAB?"on":""}" onclick="switchSem('${k}')">${esc(n)}<span class="n">${cnt}</span></button>`).join("");
+  const q=SEM_Q.trim().toLowerCase();
+  const hit=(...fields)=>!q || fields.some(f=>String(f||"").toLowerCase().includes(q));
+  let h="";
+  if(SEM_TAB==="metrics"){
+    h=(SEM.metrics||[]).filter(m=>hit(m.code,m.name_cn,m.formula,m.source))
+      .map(m=>`<div class="sem-row">
+        <div class="sh" onclick="this.parentNode.classList.toggle('open')">
+          <span class="code">${esc(m.code)}</span><span class="cn">${esc(m.name_cn||"")}</span>
+          <span class="lay ${m.tier==="derived"?"ads":(m.tier==="atomic"?"dws":"dwd")}">${esc(m.tier==="derived"?"衍生":(m.tier==="atomic"?"原子":"派生"))}</span>
+          ${m.unit?`<span class="src">${esc(m.unit)}</span>`:""}
+          ${m.trap?`<span class="lay rej" title="带口径陷阱">!trap</span>`:""}
+          <span class="grow" style="font:11px var(--mono);color:var(--faint)">${esc((m.formula||"").slice(0,80))}</span>
+          <span class="src">${esc(m.source||"")}</span></div>
+        <div class="sd">
+          <pre>${esc(m.formula||"")} ${m.filter?(" WHERE "+m.filter):""}</pre>
+          <div class="kv"><b>口径源</b>${esc(m.source||"—")}　·　<b>可加性</b>${esc(m.additivity||"—")}　·　<b>单位</b>${esc(m.unit||"—")}　·　<b>时效</b>${esc(m.availability||"—")}</div>
+          ${m.trap?`<div class="note warn" style="margin:6px 0 0">陷阱：${esc(m.trap)}</div>`:""}
+          ${m.note?`<div class="note" style="margin:6px 0 0">${esc(m.note)}</div>`:""}
+        </div></div>`).join("");
+  } else if(SEM_TAB==="tables"){
+    h=(SEM.tables||[]).filter(t=>hit(t.name,t.name_cn,t.grain,t.layer))
+      .map(t=>`<div class="sem-row">
+        <div class="sh" onclick="this.parentNode.classList.toggle('open')">
+          <span class="code">${esc(t.name)}</span><span class="cn">${esc(t.name_cn||"")}</span>
+          <span class="lay ${esc((t.layer||"").toLowerCase())}">${esc(t.layer||"—")}</span>
+          <span class="grow" style="font:11px var(--mono);color:var(--faint)">${esc(t.grain||"")}</span>
+          <span class="src">${t.rows!=null?(t.rows>=1000?(t.rows/1000).toFixed(1)+"k":t.rows)+" 行":""}</span></div>
+        <div class="sd">
+          <div class="kv"><b>位置</b>${esc(t.catalog||"")}.${esc(t.database||"")}　·　<b>主键</b>${esc(t.pk||"—")}</div>
+          <div class="kv"><b>字段（${(t.columns||[]).length}）</b>${esc((t.columns||[]).join("、"))}</div>
+          ${(t.caveats||[]).map(cv=>`<div class="note warn" style="margin:6px 0 0">注意：${esc(cv)}</div>`).join("")}
+        </div></div>`).join("");
+  } else if(SEM_TAB==="dimensions"){
+    h=(SEM.dimensions||[]).filter(d=>hit(d.code,d.name_cn,JSON.stringify(d)))
+      .map(d=>`<div class="sem-row"><div class="sh" onclick="this.parentNode.classList.toggle('open')">
+          <span class="code">${esc(d.code||"")}</span><span class="cn">${esc(d.name_cn||"")}</span>
+          <span class="lay dim">维度</span></div>
+        <div class="sd">${renderKV(d)}</div></div>`).join("");
+  } else if(SEM_TAB==="terms"){
+    h=(SEM.terms||[]).filter(t=>hit(t.term,JSON.stringify(t)))
+      .map(t=>`<div class="sem-row"><div class="sh" onclick="this.parentNode.classList.toggle('open')">
+          <span class="code">${esc(t.term||"")}</span>
+          <span class="grow">${esc(Object.entries(t).filter(([k])=>k!=="term").map(([k,v])=>k+"→"+v).join(" · "))}</span>
+          <span class="lay dws">术语</span></div>
+        <div class="sd">${renderKV(Object.fromEntries(Object.entries(t).filter(([k])=>k!=="term")))}</div></div>`).join("");
+  } else if(SEM_TAB==="caliber"){
+    h=(SEM.caliber||[]).filter(r=>hit(r.id,r.title,r.kind,r.table,r.why))
+      .map(r=>`<div class="sem-row"><div class="sh" onclick="this.parentNode.classList.toggle('open')">
+          <span class="code">${esc(r.id||"")}</span><span class="cn">${esc(r.title||"")}</span>
+          <span class="lay ${r.level==="REJECT"?"rej":"rep"}">${esc(r.level||"")}</span>
+          <span class="lay dws">${esc(r.kind||"")}</span>
+          <span class="src">${esc(r.table||"")}</span></div>
+        <div class="sd"><div class="kv"><b>为什么</b>${esc(r.why||"")}</div>
+          <div class="kv" style="margin-top:4px"><b>怎么改</b>${esc(r.hint||"")}</div>
+          ${r.fix_template?`<pre style="margin-top:6px">${esc(r.fix_template)}</pre>`:""}</div></div>`).join("");
+  } else if(SEM_TAB==="relationships"){
+    h=(SEM.relationships||[]).filter(r=>hit(r.from,r.to,r.join_on))
+      .map(r=>`<div class="sem-row"><div class="sh" onclick="this.parentNode.classList.toggle('open')">
+          <span class="code">${esc(r.from)}</span><span class="cn">→</span>
+          <span class="code">${esc(r.to)}</span>
+          <span class="lay ${r.cardinality==="N:1"?"dws":"dwd"}">${esc(r.cardinality||"")}</span>
+          <span class="grow" style="font:11px var(--mono);color:var(--faint)">${esc(r.join_on||"")}</span></div>
+        <div class="sd">${renderKV(r)}</div></div>`).join("");
+  }
+  $("#sem-body").innerHTML = h || `<div style="color:var(--faint);font-size:12.5px;padding:24px;text-align:center">没有匹配「${esc(SEM_Q)}」的条目。</div>`;
+}
+function renderKV(o){
+  return `<div class="kv">`+Object.entries(o||{}).filter(([k])=>!k.startsWith("_")).map(([k,v])=>
+    `<b>${esc(k)}</b>${typeof v==="object"?esc(JSON.stringify(v)):esc(v)}`).join("")+`</div>`;
+}
+function switchSem(tab){ SEM_TAB=tab; renderSem(); }
+
+/* ---------------- 数据源面板 ---------------- */
+function toggleSources(force){
+  const l=$("#src-layer");
+  const show = force!==undefined ? force : l.hidden;
+  l.hidden=!show;
+  if(show) openSources();
+}
+function openSources(){
+  const grid=$("#src-grid");
+  grid.innerHTML=`<div class="bload" style="grid-column:1/-1"><i class="spin"></i>读取语义层与服务状态…</div>`;
+  Promise.all([
+    fetch("/api/semantic").then(r=>r.ok?r.json():null).catch(()=>null),
+    fetch("/api/meta").then(r=>r.ok?r.json():null).catch(()=>null),
+    fetch("/api/cache").then(r=>r.ok?r.json():null).catch(()=>null),
+    fetch("/api/health").then(r=>r.ok?r.json():null).catch(()=>null),
+    fetch("/api/gateway?days=1").then(r=>r.ok?r.json():null).catch(()=>null),
+  ]).then(([sem,meta,cache,health,gw])=>{
+    const tabs=(sem&&sem.tables)||[];
+    const offTabs=tabs.filter(t=>/hive/i.test(t.catalog||""));
+    const rtTabs=tabs.filter(t=>!/hive/i.test(t.catalog||""));
+    const m=meta||{};
+    const offRange=(m.data_since?m.data_since+" ~ ":"")+ (m.data_until||"—");
+    const dot=(ok,txt)=>`<i class="dot ${ok?"":"red"}" style="display:inline-block;margin-right:5px"></i>${txt}`;
+    const c=(cache&&cache.cache)||{};
+    const eg=(gw&&gw.egress)||{}, lim=(gw&&gw.limits)||{}, led=((gw||{}).ledger||{}).total||{};
+    grid.innerHTML=`
+      <div class="src-card">
+        <div class="ct"><b>Doris · 离线主执行面</b><span class="ty">hive_catalog</span></div>
+        <div class="cd">全部问数 SQL 的执行面。<code>${esc(m.catalog||"")}.${esc(m.database||"")}</code>
+          只读账号 <code>agent_ro</code>，执行出口唯一（db.py），26 条护栏 + 行级权限在出口前。</div>
+        <div class="cd">${dot(true,"在役")}　${offTabs.length} 张登记表 · 数据窗口 <code>${esc(offRange)}</code></div>
+        <div class="cf"><span><b>引擎</b> Doris (VM 163:9030)</span><span><b>凭证</b> 走 vault · 不进上下文</span></div>
+      </div>
+      <div class="src-card">
+        <div class="ct"><b>Doris · 实时快照</b><span class="ty">internal</span></div>
+        <div class="cd">Flink→Doris 链路的历史快照，<b>2026-11-08 22:17 起停灌</b>——
+          只能查历史，不能把三天前的数说成「现在」。</div>
+        <div class="cd">${dot(true,"只读")}　${rtTabs.length} 张登记表 · 批流对账走 ads 对账表</div>
+        <div class="cf"><span><b>引擎</b> Doris internal catalog</span><span><b>状态</b> 停灌 · 保留快照</span></div>
+      </div>
+      <div class="src-card">
+        <div class="ct"><b>PostgreSQL · 治理库</b><span class="ty">agent_gov</span></div>
+        <div class="cd">审计（qa_logs）、会话、策略、成本台账。库层<b>不可变触发器</b>：
+          UPDATE/DELETE 直接报错，回放才可信。</div>
+        <div class="cd">${dot(health&&health.governance,"连通")}　保留期 180 天 · 访问审计自身也留痕（AC-14）</div>
+        <div class="cf"><span><b>位置</b> 本机 55432</span><span><b>写入</b> 仅系统出口</span></div>
+      </div>
+      <div class="src-card">
+        <div class="ct"><b>Redis · 答案缓存</b><span class="ty">6379</span></div>
+        <div class="cd">T+1 快照答案缓存，指纹含检索后端与语义层 mtime，改了就失效。</div>
+        <div class="cd">${c.degraded?dot(false,"已降级 · "+(c.backend||"local")):dot(true,(c.backend||"redis"))}
+          　命中 ${c.hit_rate==null?"—":c.hit_rate}% · 形态未解决的答案不进缓存</div>
+        <div class="cf"><span><b>位置</b> 本机 6379</span><span><b>回退</b> 进程内 local</span></div>
+      </div>
+      <div class="src-card" style="grid-column:1/-1">
+        <div class="ct"><b>模型网关 · DeepSeek</b><span class="ty">OpenAI 兼容</span></div>
+        <div class="cd">唯一的出网出口：预算·限流·台账·白名单四道闸。模型 <code>${esc(m.model||"")}</code>
+          ${lim.daily_cost_cny?`· 日预算 ¥${lim.daily_cost_cny}`:""}${lim.max_calls_per_min?` · 限流 ${lim.max_calls_per_min} 次/分`:""}</div>
+        <div class="cd">${dot(!(eg.blocked>0),eg.blocked>0?("出网拦截 "+eg.blocked+" 次"):("白名单 "+((eg.allow_hosts||[]).join("、")||"—")))}
+          　今日 ${led.calls||0} 次 · ¥${(led.cost_cny||0).toFixed(4)}</div>
+        <div class="cf"><span><b>密钥</b> vault 托管（AC-21，界面永不出真值）</span><span><b>台账</b> gateway_ledger</span></div>
+      </div>`;
+  }).catch(e=>{ grid.innerHTML=`<div class="berr">${esc(e.message)}</div>`; });
+}
+
+/* ---------------- Trace 回放 ---------------- */
+function toggleTraceView(force){
+  const l=$("#trace-layer");
+  const show = force!==undefined ? force : l.hidden;
+  l.hidden=!show;
+}
+function openTrace(traceId){
+  if(!traceId) return;
+  toggleTraceView(true);
+  $("#tr-tid").textContent=traceId;
+  $("#tr-when").textContent="读取中…";
+  $("#tr-main").innerHTML=`<div class="bload"><i class="spin"></i>从审计库取回运行记录…</div>`;
+  $("#tr-side").innerHTML="";
+  fetch("/api/trace/"+encodeURIComponent(traceId))
+    .then(async r=>{ const d=await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error(d.detail||("读取失败 "+r.status)); return d; })
+    .then(d=>{
+      const r=d.row||{}, tj=r.trace_json||{};
+      const t=(r.occurred_at||"").replace("T"," ").slice(0,19);
+      $("#tr-when").textContent=t;
+      // DAG 用同一渲染器：骨架固定，高亮这一轮实际路径
+      const st={trace:tj.trace||[], history:r.sql_versions||[], fix_log:tj.fix_log||[]};
+      const evs=tj.trace||[];
+      const main=`
+        <div class="section-title" style="margin-top:0">问题</div>
+        <div class="q" style="justify-content:flex-start"><div class="txt">${esc(r.question||"")}</div></div>
+        <div class="section-title">执行拓扑（${evs.length} 步 · ${r.elapsed_ms||0} ms）</div>
+        ${traceDAG(st)}
+        ${(r.final_sql||"")?`<div class="section-title">最终 SQL（${(r.sql_versions||[]).length} 版演化）</div>${sqlBox(r.final_sql,"final_sql")}`:""}
+        ${(r.applied_sql&&(r.applied_sql!==r.final_sql))?`<div class="section-title">权限下推后的执行 SQL</div>${sqlBox(r.applied_sql,"applied_sql")}`:""}
+        ${(r.sql_versions||[]).length>1?`<div class="section-title">SQL 演化</div>`+(r.sql_versions||[]).map((x,i)=>
+          `<div class="evol"><div class="eh"><span class="stage">第 ${i+1} 版 · ${esc(x.stage||x.attempt||"")}</span><span>${esc(x.verdict||"")}</span></div><pre>${esc(x.sql||"")}</pre></div>`).join(""):""}
+        ${((tj.findings||[]).length)?`<div class="section-title">护栏结论</div>`+(tj.findings||[]).map(f=>
+          `<span class="badge ${f.level==="REJECT"?"err":f.level==="WARN"?"warn":"info"}">${esc(f.rule||f.id||"")} · ${esc(f.level)}</span>`).join(""):""}
+        ${((tj.fix_log||[]).length)?`<div class="section-title">机械修复</div>`+(tj.fix_log||[]).map(x=>`<div class="fixline">${esc(x)}</div>`).join(""):""}
+        ${r.refused?`<div class="note err" style="margin-top:10px">该轮拒答：${esc(r.refuse_reason||"")}</div>`:""}
+        ${r.answer_excerpt?`<div class="section-title">答案摘录</div><div class="details-meta">${esc(r.answer_excerpt)}</div>`:""}`;
+      $("#tr-main").innerHTML=main;
+      const kv=(k,v)=>`<div class="kv"><b>${k}</b>${v}</div>`;
+      $("#tr-side").innerHTML=`
+        <div class="ts">运行信息</div>
+        ${kv("trace_id",esc(r.trace_id||""))}
+        ${kv("时间",esc(t))}
+        ${kv("用户 / 角色",esc(r.user_id||"—")+" / "+esc(r.role||"—"))}
+        ${kv("来源",esc(r.source||"—"))}
+        ${kv("意图",esc(r.intent||"—"))}
+        ${kv("结论",`<span class="badge ${r.verdict==="reject"?"err":(r.verdict==="refuse"?"warn":"ok")}">${esc(r.verdict||"—")}</span>`)}
+        <div class="ts">数据访问</div>
+        ${kv("涉及表",esc((r.tables||[]).join("、")||"—"))}
+        ${kv("返回行数",fmt(r.row_count))}
+        ${kv("PII 脱敏",r.pii_hits?(r.pii_hits+" 处"):"无")}
+        <div class="ts">成本</div>
+        ${kv("tokens",((r.tokens_in||0)+" in / "+(r.tokens_out||0)+" out"))}
+        ${kv("耗时",fmt(r.elapsed_ms)+" ms")}
+        ${kv("成本","¥"+((r.cost_cny||0)).toFixed(4))}
+        <div class="ts">口径</div>
+        ${kv("时间窗",(r.time_start||"—")+" ~ "+(r.time_end||"—"))}
+        ${kv("策略指纹",esc((r.policy_hash||"—").slice(0,12)))}
+        <div class="ts">本次回放</div>
+        <div class="kv">${d.access_logged
+          ?"查看行为已记入审计访问表（AC-14）"
+          :`<span style="color:var(--err)">未能留痕：${esc(d.access_error||"")}</span>`}</div>`;
+    })
+    .catch(e=>{ $("#tr-main").innerHTML=`<div class="note err">${esc(e.message)}</div>`; $("#tr-when").textContent=""; });
+}
+
+/* ---------- 经营看板 ---------- */
+const BOARD = [
+  {title:"销售额 · 近 7 天走势", body:{metric:"revenue_sum", kind:"trend", days:7}},
+  {title:"活跃用户 · 近 7 天走势", body:{metric:"uv", kind:"trend", days:7}},
+  {title:"销售额 · 各省份分布", body:{metric:"revenue_sum_province", kind:"breakdown", dim:"province", days:7}},
+  {title:"活跃用户 · 各省份分布", body:{metric:"uv", kind:"breakdown", dim:"province", days:7}},
+  {title:"播放量 · 各品类分布", body:{table:"dws_genre_daily", value_col:"play_start_cnt", kind:"breakdown", dim:"genre", days:7}},
+];
+let boardLoading = false;
+function toggleBoard(force){
+  const l=$("#board-layer");
+  const show = force!==undefined ? force : l.hidden;
+  l.hidden = !show;
+  if(show) loadBoard();
+}
+function loadBoard(){
+  if(boardLoading) return; boardLoading = true;
+  const grid=$("#board-grid");
+  grid.innerHTML = BOARD.map(()=>`<div class="bcard"><div class="bload"><i class="spin"></i>查询中…</div></div>`).join("");
+  BOARD.forEach((cfg,i)=>{
+    const card=grid.children[i];
+    fetch("/api/chart",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(cfg.body)})
+      .then(async r=>{
+        const d=await r.json().catch(()=>({}));
+        if(!r.ok) throw new Error(d.detail||("失败 "+r.status));
+        return d;
+      })
+      .then(d=>{
+        if(d.error) throw new Error(d.error);
+        const rows=d.rows||[], cols=d.columns||[];
+        const vi = cols.indexOf("value");
+        const last = rows.length && vi>=0 && _isNum(rows[rows.length-1][vi]) ? rows[rows.length-1][vi] : null;
+        const lastBit = d.kind==="trend" && last!==null
+          ? `<span class="bv">${fmt(last)}</span><span class="bu">${esc(d.name_cn)}</span>` : "";
+        card.innerHTML = `<div class="bt"><b>${esc(cfg.title)}</b>${lastBit}</div>`
+          + (renderChart(cols, rows)
+             || `<div class="berr">结果不适合画图（${rows.length} 行）。</div>`)
+          + `<div class="cnote">查询 ${d.elapsed_ms} ms${(d.policy_injected||[]).length?" · 已注入行级权限":""}</div>`;
+      })
+      .catch(e=>{
+        card.innerHTML = `<div class="bt"><b>${esc(cfg.title)}</b></div><div class="berr">${esc(e.message)}</div>`;
+      });
+  });
+  // 质量体检：规则表 + 阈值 + 趋势，单独一张跨列卡（P2 / 论文第四章 L0~L5）
+  const dqCard=document.createElement("div");
+  dqCard.className="bcard"; dqCard.id="dq-card"; dqCard.style.gridColumn="1/-1";
+  dqCard.innerHTML=`<div class="bload"><i class="spin"></i>读取质量体检结果…</div>`;
+  grid.appendChild(dqCard);
+  loadDq(dqCard);
+  // 运营指标：成功率 / P95 / 成本 / 护栏命中率，从不可变审计日志只读聚合
+  const opsCard=document.createElement("div");
+  opsCard.className="bcard"; opsCard.id="ops-card"; opsCard.style.gridColumn="1/-1";
+  opsCard.innerHTML=`<div class="bload"><i class="spin"></i>聚合运营指标…</div>`;
+  grid.appendChild(opsCard);
+  loadOps(opsCard);
+  // 走完这一轮再放开，防止连点时旧请求把新内容覆盖成过期数据
+  setTimeout(()=>{ boardLoading=false }, 500);
+}
+
+function renderDq(d){
+  if(!d.ok) return `<div class="bt"><b>数据质量体检 · L0~L5</b></div>
+    <div class="berr">${esc(d.reason||"暂无体检数据")}</div>
+    <div class="etl-actions"><button onclick="runDq()">立即体检</button></div>`;
+  const l=d.latest||{}, rs=d.results||[], alerts=rs.filter(x=>x.alert);
+  const fam=(d.families||[]).map(f=>`${esc(f.id)} ${esc(f.name_cn)} ${f.count}${esc(f.unit)}`).join(" · ");
+  const trend=(d.trend||[]).map(t=>`${t.passed}/${t.total}`).join(" → ");
+  const rows=rs.map(r=>`<div class="dq-row ${r.alert?"badc":(r.ok?"okc":"warnc")}">
+    ${r.ok?"✓":"!"} ${esc(r.rule_id)} ${esc(r.name_cn||"")}
+    <span>${esc(r.value==null?"—":r.value)} / ${esc(r.threshold||"")}</span></div>`).join("");
+  return `<div class="bt"><b>数据质量体检 · L0~L5</b>
+      <span class="bv">${l.passed}/${l.total}</span><span class="bu">通过</span></div>
+    <div class="cnote">告警 ${l.alerts} 项 · 最近趋势 ${esc(trend)}</div>
+    <div class="cnote">规则族：${fam}</div>
+    ${alerts.length?`<div class="dq-alerts">${alerts.map(a=>
+      `<div>! ${esc(a.rule_id)} ${esc(a.name_cn||"")}：实测 ${esc(a.value)}，阈值 ${esc(a.threshold)}</div>`
+    ).join("")}</div>`:""}
+    <details class="fold"><summary>全部 ${rs.length} 条检查明细</summary>
+      <div class="dq-rows">${rows}</div></details>
+    <div class="etl-actions"><button id="dq-run" onclick="runDq()">重新体检</button></div>`;
+}
+
+function loadOps(card){
+  const el=card||$("#ops-card"); if(!el) return;
+  fetch("/api/ops/metrics?days=7").then(r=>r.ok?r.json():Promise.reject(new Error("读取失败 "+r.status)))
+    .then(d=>{ el.innerHTML=renderOps(d); })
+    .catch(e=>{ el.innerHTML=`<div class="bt"><b>运营指标 · 近 7 天</b></div>
+      <div class="berr">${esc(e.message)}</div>`; });
+}
+
+function renderOps(d){
+  const k=d.kpi||{}, s=d.series||[], roles=d.by_role||[];
+  const kpi=(label,val,sub)=>`<div class="ops-kpi"><div class="k">${esc(label)}</div>
+    <div class="v">${esc(val)}</div><div class="s">${esc(sub)}</div></div>`;
+  const trend=s.map(x=>`${esc(x.date)} ${x.n}题/P95 ${x.p95_ms}ms/¥${x.cost_cny}`).join("　→　");
+  const roleLine=roles.slice(0,5).map(r=>`${esc(r.role)} ${r.n}`).join(" · ");
+  return `<div class="bt"><b>运营指标 · 近 7 天</b>
+      <span class="bv">${k.questions||0}</span><span class="bu">次问答</span></div>
+    <div class="ops-kpis">
+      ${kpi("可用性",(k.availability||0)+"%","报错 "+(k.errors||0)+" 次")}
+      ${kpi("P95 时延",(k.p95_ms||0)+" ms","均值 "+(k.avg_ms||0)+" ms")}
+      ${kpi("模型成本","¥"+(k.cost_cny||0),"tokens "+(k.tokens_in||0))}
+      ${kpi("护栏命中",(k.guard_hit_rate||0)+"%",(k.guard_hits||0)+" 次 REJECT")}
+    </div>
+    <div class="cnote">有效回答 ${k.answered||0}（${k.answer_rate||0}%） · 拒答 ${k.refused||0}（${k.refuse_rate||0}%，含预期边界题） · 实时快照查询 ${k.rt_queries||0}（${k.rt_share||0}%）</div>
+    <div class="cnote">按天：${esc(trend||"暂无数据")}</div>
+    <div class="cnote">角色分布：${esc(roleLine||"—")}</div>
+    <div class="cnote">${esc(d.note||"")}</div>`;
+}
+
+function loadDq(card){
+  const el=card||$("#dq-card"); if(!el) return;
+  fetch("/api/dq/report").then(r=>r.ok?r.json():Promise.reject(new Error("读取失败 "+r.status)))
+    .then(d=>{ el.innerHTML=renderDq(d); })
+    .catch(e=>{ el.innerHTML=`<div class="berr">${esc(e.message)}</div>`; });
+}
+
+function runDq(){
+  const b=$("#dq-run"); if(b){ b.disabled=true; b.textContent="体检中…（约 5 秒）"; }
+  fetch("/api/dq/run",{method:"POST"})
+    .then(async r=>{const d=await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error(d.detail||("失败 "+r.status)); return d})
+    .then(d=>{
+      const s=d.summary||{};
+      const el=$("#dq-card");
+      if(el) el.innerHTML=`<div class="bt"><b>数据质量体检完成</b>
+        <span class="bv">${s.passed}/${s.total}</span><span class="bu">通过</span></div>
+        <div class="${d.ok?"okc":"warnc"}">${d.ok?"✓ 全部通过":"! 有 "+s.failed+" 项未通过 / "+s.alerts+" 项告警"}</div>
+        <div class="cnote">${d.stored?"结果已落库，趋势可回放":"结果未落库："+esc(s.error||"")}</div>
+        <div class="etl-actions"><button onclick="loadDq()">查看报告与趋势</button></div>`;
+    })
+    .catch(e=>{ const el=$("#dq-card");
+      if(el) el.innerHTML=`<div class="berr">${esc(e.message)}</div>
+        <div class="etl-actions"><button onclick="loadDq()">返回报告</button></div>`; });
+}
+
+/* ---------- ETL 开发 ---------- */
+function toggleEtl(force){
+  const l=$("#etl-layer");
+  const show = force!==undefined ? force : l.hidden;
+  l.hidden = !show;
+  if(show){ $("#etl-out").innerHTML=""; $("#etl-cost").textContent=""; loadEtlList(); }
+}
+let CUR_ETL = null;
+
+function execEtl(token){
+  if(!CUR_ETL){ toast("先生成一次再执行"); return }
+  const btn=$("#etl-exec"), out=$("#exec-out");
+  if(!btn||!out) return;
+  btn.disabled=true; btn.textContent="执行中…（Hive 端 1~3 分钟）";
+  out.innerHTML=`<div class="note info">已提交到 Hive 引擎执行，完成后会自动刷 Doris 元数据、用问数账号回读、并把行数回写到语义层。</div>`;
+  fetch("/api/etl/execute",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({id:CUR_ETL, confirm_token:token||""})})
+    .then(async r=>{const d=await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error(d.detail||("失败 "+r.status)); return d})
+    .then(d=>{
+      if(d.need_confirm){
+        // 金额类闸门：不跑，先把风险摊开。确认令牌只对这份 SQL 有效，
+        // 重新生成后自动失效——"上次点过"不能当永久免检。
+        out.innerHTML=`<div class="note warn"><b>金额类生成物 · 需确认口径后才执行</b><br>
+            语句能跑 ≠ 数是对的。这条产出涉及金额，执行前请逐条确认：</div>
+          <div class="etl-checks">${(d.risks||[]).map(x=>
+            `<div class="warnc">! ${esc(x.title)} · ${esc(x.detail)}</div>
+             <div style="font-size:11.5px;color:var(--muted);padding:0 0 6px 16px">${esc(x.hint||"")}</div>`
+          ).join("")}</div>
+          <div class="etl-actions">
+            <button class="primary" id="etl-exec-ok" onclick="execEtl('${esc(d.token)}')">已核对口径，仍然执行</button>
+            <button onclick="genEtl()">回去改需求</button>
+          </div>`;
+        btn.textContent="执行建表（Hive）";
+        return;
+      }
+      if(d.ok){
+        out.innerHTML=`<div class="okc">✓ 执行成功 · ${d.rows} 行 · ${d.seconds}s · 元数据${d.refreshed?"已刷新":"刷新失败（不影响可读）"}</div>`
+          + (d.dt_min?`<div class="okc">✓ 数据窗口 ${esc(d.dt_min)} ~ ${esc(d.dt_max)}（问数账号回读）</div>`:"")
+          + `<div class="${d.confirmed?"okc":""}">${d.rowcount&&d.rowcount.synced?"✓ 行数已回写 rowcount.tsv（下游 sem_check 不会再报过期）":"! 行数回写失败："+esc((d.rowcount||{}).error||"未知")}</div>`
+          + `<div class="cnote">${d.confirmed?"本次执行经过金额类二次确认（已记入执行记录）":"金额类闸门：未命中（本次产出不含金额指标）"}</div>`;
+        const reg=$("#etl-reg"); if(reg) reg.hidden=false;
+        btn.textContent="重新执行";
+      } else {
+        out.innerHTML=`<div class="badc">✗ ${esc(d.error||"执行失败")}</div>`
+          + (d.output_tail?`<details class="fold"><summary>Hive 输出</summary><pre>${esc(d.output_tail)}</pre></details>`:"");
+        btn.textContent="执行建表（Hive）";
+      }
+      loadEtlList();
+    })
+    .catch(e=>{ out.innerHTML=`<div class="note err">${esc(e.message)}</div>`;
+      btn.textContent="执行建表（Hive）"; })
+    .finally(()=>{ btn.disabled=false; });
+}
+
+function refreshRowcount(){
+  const out=$("#exec-out"), btn=$("#etl-rc");
+  if(!out) return;
+  if(btn){ btn.disabled=true; btn.textContent="实测中…"; }
+  out.innerHTML=`<div class="note info">正在用问数账号实测全部 dev 表行数，并与语义层声明逐张对照…</div>`;
+  fetch("/api/etl/rowcount/refresh",{method:"POST"})
+    .then(async r=>{const d=await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error(d.detail||("失败 "+r.status)); return d})
+    .then(d=>{
+      const drift=d.drift||[];
+      const bad=drift.filter(x=>x.status!=="一致");
+      const row=x=>`<div class="etl-drift"><span class="t">${esc(x.table)}</span>
+        <span>实测 ${x.measured}</span><span>声明 ${x.declared==null?"—":x.declared}</span>
+        <span>快照 ${x.snapshot==null?"—":x.snapshot}</span>
+        <span class="${x.status==="一致"?"okc":"warnc"}">${esc(x.status)}</span></div>`;
+      out.innerHTML=`<div class="${d.ok?"okc":"warnc"}">${d.ok?"✓":"!"} 行数校准完成：${drift.length} 张 dev 表，漂移 ${bad.length} 张${bad.length?"（已回写）":"（本来就一致）"}</div>
+        ${drift.map(row).join("")}
+        ${(d.failed&&Object.keys(d.failed).length)?`<div class="badc">读不到：${Object.keys(d.failed).join("、")}</div>`:""}
+        ${d.semcheck?`<details class="fold"><summary>sem_check 输出</summary><pre>${esc(d.semcheck.tail||"")}</pre></details>`:""}`;
+    })
+    .catch(e=>{ out.innerHTML=`<div class="note err">${esc(e.message)}</div>`; })
+    .finally(()=>{ if(btn){ btn.disabled=false; btn.textContent="校准行数"; } });
+}
+
+function regDraft(){
+  if(!CUR_ETL){ toast("先生成一次"); return }
+  const out=$("#exec-out"); if(!out) return;
+  out.innerHTML=`<div class="note info">正在实测表结构、行数与登记冲突…</div>`;
+  fetch(`/api/etl/register/draft?id=${CUR_ETL}`)
+    .then(async r=>{const d=await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error(d.detail||("失败 "+r.status)); return d})
+    .then(d=>{
+      const cs=d.checks||[], passed=cs.filter(c=>c.ok).length;
+      out.innerHTML=`<div class="etl-sub">登记草案 · 机检 ${passed}/${cs.length} 通过</div>
+        <div class="etl-checks">${cs.map(c=>`<div class="${c.ok?"okc":"badc"}">${c.ok?"✓":"✗"} ${esc(c.name)} · ${esc(c.detail)}</div>`).join("")}</div>
+        ${sqlBox(d.ddl,"将写入 sql/offline · DDL")}
+        ${sqlBox(d.yaml,"将写入 tables.yaml · 策展条目")}
+        <div class="note info">${esc(d.note||"")}</div>
+        <div class="etl-actions"><button class="primary" id="etl-reg-ok" onclick="confirmReg()">确认入库</button></div>`;
+    })
+    .catch(e=>{ out.innerHTML=`<div class="note err">${esc(e.message)}</div>`; });
+}
+
+function confirmReg(){
+  const out=$("#exec-out"), btn=$("#etl-reg-ok");
+  if(btn){ btn.disabled=true; btn.textContent="写入中…"; }
+  fetch("/api/etl/register/confirm",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({id:CUR_ETL})})
+    .then(async r=>{const d=await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error(d.detail||("失败 "+r.status)); return d})
+    .then(d=>{
+      if(d.ok){
+        out.innerHTML=`<div class="okc">✓ 已登记 ${esc(d.target)}（${d.rows} 行）· 语义层校验通过，问数链路现在能召回这张表</div>
+          <details class="fold"><summary>gen_tables / sem_check 输出</summary><pre>${esc(((d.regen||{}).tail||"")+"\n"+((d.semcheck||{}).tail||""))}</pre></details>`;
+      } else {
+        out.innerHTML=`<div class="badc">✗ ${esc(d.error||"登记未通过")}</div>
+          <details class="fold"><summary>输出</summary><pre>${esc((((d.regen||{}).tail||"")+"\n"+((d.semcheck||{}).tail||""))||"")}</pre></details>`;
+      }
+    })
+    .catch(e=>{ out.innerHTML=`<div class="note err">${esc(e.message)}</div>`; });
+}
+
+function genEtl(){
+  const req=$("#etl-req").value.trim();
+  if(!req){ toast("先描述一下要加工什么"); return }
+  const btn=$("#etl-gen"); btn.disabled=true; btn.textContent="生成中…";
+  $("#etl-cost").textContent="";
+  fetch("/api/etl",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({requirement:req})})
+    .then(async r=>{
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error(d.detail||("失败 "+r.status));
+      return d;
+    })
+    .then(d=>{
+      const c=d.checks||{};
+      const ok = c.stmt_ok&&c.target_ok&&c.tables_ok&&c.danger_ok;
+      const line=(okb,txt,warn)=>`<div class="${warn?"warnc":(okb?"okc":"badc")}">${warn?"!":(okb?"✓":"✗")} ${esc(txt)}</div>`;
+      // 口径机检的结论用「告警」开头：标黄不标红——它不拦执行，只说明
+      // 「能跑，但可能不是你要的那个数」，由人决定照做还是改口径。
+      const sumLine=x=>{
+        const warn=(x||"").startsWith("告警");
+        const okb=!warn&&((x||"").startsWith("通过")||(x||"").startsWith("✓"));
+        return line(okb, (x||"").replace(/^(通过|不通过|未通过实证|告警)[:：]?/,"").trim(), warn);
+      };
+      // 分步推理时间线：模型的设计推理 + 系统的实证检查，按顺序呈现
+      const steps=(d.steps&&d.steps.length)
+        ? `<ol class="etl-steps">${d.steps.map(s=>
+            `<li><b>${esc(s.title||"")}</b>${s.detail?`<span>${esc(s.detail)}</span>`:""}</li>`).join("")}</ol>`
+        : "";
+      $("#etl-out").innerHTML = `<div class="ttl">${esc(d.title||"")}</div>
+        <div class="tgt">目标表 ${esc(d.target_table||"—")} · ${c.explain_ok?"EXPLAIN 实证通过":"未通过实证"}</div>
+        ${steps}
+        <div class="etl-checks">${(d.summary||[]).map(sumLine).join("")}</div>
+        ${d.sql?sqlBox(d.sql):""}
+        ${d.daily_sql?`
+        <div class="ttl">每日调度 · T-1 幂等重刷</div>
+        <div class="etl-checks">${(d.daily_summary||[]).map(sumLine).join("")}</div>
+        ${sqlBox(d.daily_sql,"每日重刷 SQL")}
+        <div class="sqlbox"><div class="bar">调度脚本 · DolphinScheduler(SHELL) 任务直接粘贴
+          <button onclick="cp(this)">复制</button></div><pre>${esc(d.schedule_script||"脚本未生成（每日 SQL 未全部通过校验）")}</pre></div>`:""}
+        <div class="etl-actions">
+          <button class="primary" id="etl-exec" onclick="execEtl()">执行建表（Hive）</button>
+          <button id="etl-reg" onclick="regDraft()" hidden>登记语义层</button>
+          <button id="etl-rc" onclick="refreshRowcount()">校准行数</button>
+        </div>
+        <div id="exec-out"></div>
+        <div class="cnote">生成物已登记${d.id?`（#${d.id}）`:""} · 执行由系统 SSH 到白名单机器跑 Hive，执行后自动刷 Doris 元数据并用问数账号回读；调度脚本挂 DolphinScheduler 后自动按天跑</div>`;
+      $("#etl-cost").textContent = d.cost_cny!=null ? `本次生成 ¥${(+d.cost_cny).toFixed(4)}` : "";
+      CUR_ETL = d.id || null;
+      loadEtlList();
+    })
+    .catch(e=>{ $("#etl-out").innerHTML = `<div class="note err">${esc(e.message)}</div>`; })
+    .finally(()=>{ btn.disabled=false; btn.textContent="生成 SQL"; });
+}
+function loadEtlList(){
+  fetch("/api/etl").then(r=>r.ok?r.json():null).then(d=>{
+    const list=$("#etl-list"); if(!list||!d) return;
+    const rows=d.scripts||[];
+    list.innerHTML = rows.length
+      ? rows.map(x=>{
+          const v=x.status==="verified";
+          const tm=(x.created_at||"").replace("T"," ").slice(5,16);
+          return `<div class="etl-item"><span class="t" title="${esc(x.requirement||"")}">${esc(x.title||x.target_table)}</span>
+            <span class="tt">${esc(x.target_table)}</span>
+            <span class="st ${v?"v":"g"}">${v?"已实证":"未实证"}</span>
+            <span class="tm">${esc(tm)}</span></div>`;
+        }).join("")
+      : `<div style="font-size:11.5px;color:var(--faint);padding:10px 2px">还没有生成记录。</div>`;
+  }).catch(()=>{});
+}
+
+function send(){
+  const inp=$("#q");
+  const q=inp.value.trim(); if(!q||busy) return;
+  // 发出去立刻清空并把输入框收回复一行——问题已经在对话里了，留在框里只会挡着下一句
+  inp.value=""; autoGrow(inp);
+  busy=true; $("#send").disabled=true;
+  // 空态连同示例问题一起撤掉，之后整屏只有对话
+  const empty=$("#empty"); if(empty) empty.remove();
+  const box=document.createElement("div"); box.className="msg";
+  box.innerHTML=`<div class="q"><div class="txt">${esc(q)}</div></div>
+    <div id="pending">${wrapAnswer(`<div class="thinking"><i class="spin"></i>正在解析时间、检索语义层、生成 SQL…</div>`)}</div>`;
+  $("#messages").appendChild(box);
+  $("#clear-btn").hidden = false;
+  $("#pending").scrollIntoView({block:"end"});
+
+  // 有待恢复的问答：这一句是「补充说明」而不是新问题——发给 resume，
+  // 用同一个 thread_id 接着跑，SQL 只执行一次。
+  const pend = PENDING_HITL;
+  const apiUrl = pend ? "/api/ask/resume" : "/api/ask";
+  const payload = pend
+    ? {thread_id: pend.thread_id, answer: q, conversation_id: pend.conversation_id || CUR}
+    : {question: q, conversation_id: CUR};
+  fetch(apiUrl,{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify(payload)})
+    .then(async r=>{
+      const st=await r.json().catch(()=>({}));
+      if(r.status===401){ showLogin("会话已过期，请重新登录"); throw new Error("unauthorized") }
+      if(r.status===429){ throw new Error(st.error||"配额已用尽，请稍后再试") }
+      if(!r.ok) throw new Error(st.detail||st.error||("请求失败 "+r.status));
+      return st;
+    }).then(st=>{
+      // 首轮由服务端建会话并回传 id，之后这个 id 就是"接着聊"的依据
+      if(st.conversation_id && !CUR) CUR = st.conversation_id;
+      if(st.kind==="etl_redirect"){
+        // 建表需求被分流：渲染引导说明；有权限就直接把需求带进 ETL 面板开跑
+        const p=$("#pending"); if(p) p.outerHTML = wrapAnswer(
+          `<div class="card"><div class="card-top"><h2>建表需求</h2>
+           <span class="tag">${st.allowed?"转入 ETL 开发":"需要工程师"}</span></div>
+           <div class="card-body"><div class="note">${esc(st.note||"")}</div>
+           <div class="cnote">需求已存入对话历史：${esc(st.requirement||"")}</div></div></div>`);
+        if(st.allowed){
+          toggleEtl(true);
+          $("#etl-req").value = st.requirement||"";
+          genEtl();
+        }
+        $("#messages").scrollTop=$("#messages").scrollHeight;
+        loadConvs();
+        return;
+      }
+      if(st.interrupted){
+        const p0=$("#pending"); if(p0) p0.outerHTML = wrapAnswer(renderAnswer(st));
+        PENDING_HITL = {thread_id: st.thread_id, conversation_id: st.conversation_id || CUR};
+        $("#q").placeholder = "补一句澄清，或回「不查了」放弃这次查询";
+        $("#messages").scrollTop=$("#messages").scrollHeight;
+        loadConvs();
+        return;
+      }
+      // 恢复成功：之后的话又是新问题
+      PENDING_HITL = null;
+      $("#q").placeholder = "问一个业务问题，例如：2026-11-08 的 DAU 是多少";
+      const p=$("#pending"); if(p) p.outerHTML = wrapAnswer(renderAnswer(st));
+      $("#messages").scrollTop=$("#messages").scrollHeight;
+      loadConvs();
+      if(st.conv_error) toast("回答已生成，但这轮没存进历史：" + st.conv_error);
+    })
+    .catch(e=>{ const p=$("#pending"); if(p) p.outerHTML=
+      `<div class="note err">${e.message==="unauthorized"?"请先登录。":"请求失败："+esc(e.message)}<br>确认 webapp.py 还在运行、端口没被占用。</div>`; })
+    .finally(()=>{busy=false;$("#send").disabled=false;$("#q").focus()});
+}
+
+/* ---------- 可信度：规则判的，不是模型自评 ----------
+   三级 + 每条理由可指认。理由列表直接来自后端 trust.reasons，
+   前端不做任何"加工"——把规则结论二次润色，就等于又引入了一层不可复算。 */
+function trustTag(st){
+  const t=st.trust;
+  if(!t||!t.level||st.refused) return "";
+  const cls=t.level==="low"?"err":(t.level==="medium"?"warn":"ok");
+  const why=(t.reasons||[]).map(r=>r.text).join("；")||t.basis||"";
+  return `<span class="trust ${cls}" title="${esc(why)}">可信度 ${esc(t.label||"—")}${
+    (t.score!=null&&t.score<100)?` · ${esc(String(t.score))}`:""}</span>`;
+}
+function trustWhy(st){
+  const t=st.trust;
+  if(!t||!t.level||st.refused) return "";
+  const rs=t.reasons||[];
+  const skipped=t.checks?Object.entries(t.checks).filter(([,v])=>!v.hit&&v.note):[];
+  if(!rs.length&&!skipped.length) return "";
+  const body=rs.length
+    ? `<b>为什么是「${esc(t.label)}」</b>：${rs.map(r=>esc(r.text)).join("；")}`
+    : `<b>可信度${esc(t.label)}</b>：四项自检没有命中异常`;
+  const tail=skipped.length
+    ? `<div style="margin-top:3px;opacity:.8">未做：${skipped.map(([k,v])=>
+        `${esc(k)}（${esc(String(v.note).slice(0,40))}）`).join("、")}</div>` : "";
+  return `<div class="trust-why ${t.level==="low"?"low":""}">${body}${tail}</div>`;
+}
+
+/* ---------- 反馈条：唯一来自真实使用的信号 ----------
+   评测集是"我们自己出的题"，反馈是"用户实际问的题"，两者互补。
+   没有 trace_id 的卡片（元问题、拒答）不显示——那些不需要判断准不准。 */
+const FB_REASONS=[["caliber","口径不对"],["number","数字不对"],
+  ["offtopic","答非所问"],["other","其他"]];
+function feedbackBar(st){
+  if(!st.trace_id||st.refused||st.error||st.meta_answer) return "";
+  return `<div class="fb" data-trace="${esc(st.trace_id)}" data-trust="${esc((st.trust||{}).level||"")}">
+    <span class="fb-q">这个答案准吗？</span>
+    <button class="fb-btn" data-v="useful">有用</button>
+    <button class="fb-btn" data-v="wrong">不准</button>
+    <span class="fb-state"></span></div>`;
+}
+async function sendFeedback(bar, trace, verdict, reason){
+  const state=bar.querySelector(".fb-state");
+  state.className="fb-state"; state.textContent="提交中…";
+  try{
+    const r=await fetch("/api/feedback",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({trace_id:trace,verdict:verdict,reason:reason||"",
+        trust_level:bar.dataset.trust||""})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(d.detail||d.error||("HTTP "+r.status));
+    state.className="fb-state ok";
+    state.textContent = verdict==="useful" ? "已记录：有用" : "已记录：不准，会进 badcase 池";
+    bar.querySelectorAll(".fb-btn").forEach(b=>b.classList.remove("sel"));
+  }catch(e){
+    // 失败必须说"没记上"，否则用户以为贡献了 badcase，其实什么都没留下
+    state.className="fb-state err"; state.textContent="没记上："+e.message;
+  }
+}
+document.addEventListener("click",e=>{
+  const btn=e.target.closest(".fb-btn"); if(!btn) return;
+  const bar=btn.closest(".fb"); if(!bar) return;
+  const trace=bar.dataset.trace, v=btn.dataset.v;
+  if(v==="wrong"&&!bar.dataset.asked){
+    // 第一次点"不准"：先展开原因，再点一次才提交（带原因才有价值）
+    bar.dataset.asked="1";
+    bar.querySelectorAll(".fb-btn").forEach(b=>b.classList.remove("sel"));
+    btn.classList.add("sel");
+    const st=bar.querySelector(".fb-state");
+    st.innerHTML=FB_REASONS.map(([k,label])=>
+      `<button class="fb-btn" data-r="${k}" style="margin-right:4px">${esc(label)}</button>`).join("");
+    return;
+  }
+  const rk=btn.dataset.r;
+  if(rk){ sendFeedback(bar,trace,"wrong",rk); return; }
+  if(v==="useful") sendFeedback(bar,trace,"useful","");
+});
+
+function renderAnswer(st){  if(st.error) return `<div class="note err">服务异常：${esc(st.error)}</div>`;
+  // HITL（P1-2）：图停在 plan 节点等用户补一句话。这里必须说清"还没查库"——
+  // 用户看到"需要澄清"很容易以为已经查过一次了。
+  if(st.interrupted){
+    return `<div class="card"><div class="card-top"><h2>需要你先说清一件事</h2>
+      <span class="tag warn">已暂停 · 未执行 SQL</span></div><div class="card-body">
+      <div class="note">${esc(st.clarify_question||"")}</div>
+      <div class="cnote">直接在下面回一句就能接着查；回「不查了」可以放弃这次查询。
+      同一个问题不会被查两次。</div></div></div>`;
+  }
+  if(st.meta_answer) return renderMetaAnswer(st);
+  const w=st.time_window||{}, res=st.result||{}, refused=!!st.refused;
+  if(refused){
+    return `<div class="card"><div class="card-top"><h2>答不了这个问题</h2>
+      <span class="tag err">已拒答</span></div><div class="card-body">
+      <div class="note err">${esc(st.refuse_reason||"")}</div>
+      ${foldTrace(st, rawBlock(st.answer))}</div></div>`;
+  }
+  if(res.error) return `<div class="note err">查询执行失败：${esc(res.error)}</div>`;
+
+  const cols=res.columns||[], rows=res.rows||[];
+  const title=cover(st);
+  let hero="";
+  if(rows.length===1&&cols.length){
+    hero=`<div class="hero">`+cols.map((c,i)=>
+      `<div class="hero-item"><span class="k">${esc(c)}</span><div class="v">${fmt(rows[0][i])}</div></div>`).join("")+`</div>`;
+  }
+  // 有时间或类别维度 + 数值列就顺手画一张图——用户要的是"近7天销售额长什么样"，
+  // 不是一张要自己找规律的表。表格保留在下面，要精确数字的人还在。
+  const chart = renderChart(cols, rows);
+  let table="";
+  if(rows.length>1&&cols.length){
+    table=`<div class="table-wrap"><table><thead><tr>${cols.map(c=>`<th>${esc(c)}</th>`).join("")}</tr></thead>
+      <tbody>${rows.slice(0,20).map(r=>`<tr>${cols.map((_,i)=>`<td>${fmt(r[i])}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
+      ${rows.length>20?`<div class="note info">只显示前 20 行，共 ${rows.length} 行。</div>`:""}`;
+  }
+  const notes=[];
+  if(w.note) notes.push(`<div class="note warn">${esc(w.note)}</div>`);
+  for(const c of (st.dimension_cautions||[]).slice(0,2))
+    notes.push(`<div class="note warn">维度提示：${esc(c)}</div>`);
+  const warns=(st.findings||[]).filter(f=>f.level==="WARN");
+  for(const f of warns.slice(0,2)) notes.push(`<div class="note warn">${esc(f.message)}</div>`);
+
+  // 阶段 3：答案形态是"我理解你在问什么"的显式声明（现在只进折叠条）。
+  const shp=st.shape||{};
+  // 缓存命中要说出来：0 token、0 查询是真的，但"这次没真跑"用户有权知道。
+  const cacheTag=st.cache_hit?`<span class="tag">缓存命中</span>`:"";
+  // 追问沿用了上一轮的口径时，正文里带一句——数字按哪套口径算的，用户有权知道。
+  const _fu=st.followup||{};
+  const followNote=(_fu.metrics||_fu.time)
+    ? `<div class="follow-note">追问：${_fu.metrics?`指标沿用上一轮的 ${esc(_fu.metrics.join("、"))}`:""}${
+        _fu.metrics&&_fu.time?"，":""}${
+        _fu.time?`时间沿用上一轮的 ${esc(_fu.time.start)} ~ ${esc(_fu.time.end)}`:""}</div>` : "";
+  if(st.shape_unresolved && (st.shape_issues||[]).length)
+    notes.push(`<div class="note warn">形态提示：${esc(st.shape_issues[0])}</div>`);
+  // 界面只留结果；SQL、口径细节、执行过程都是 agent 的工作痕迹，收进折叠条
+  // 口径版本放在折叠区顶部：它是"这条答案按哪版口径算的"，排查历史答案时必须能看到，
+  // 但对当前读者是噪音——所以不占主视觉，展开即在。
+  const cvLine = st.caliber_version
+    ? `<div class="cv-line">口径版本：<code>${esc(st.caliber_version)}</code></div>` : "";
+  const tech = (st.sql||st.answer)
+    ? `${cvLine}<div class="section-title">复算 SQL</div>${sqlBox(st.sql||"")}${rawBlock(st.answer)}` : "";
+  return `<div class="card"><div class="card-top">
+      <h2>${esc(title)}</h2>${trustTag(st)}${cacheTag}</div>
+    <div class="card-body">${trustWhy(st)}${hero}${chart}${table}${notes.join("")}${followNote}${feedbackBar(st)}${foldTrace(st, tech)}</div></div>`;
+}
+/* ---------- 结果画图：时间列折线 / 类别列条形 ----------
+   不引图表库：页面要离线可用，要画的也只有这两种形态；
+   手写 SVG 的另一个好处是配色/字号跟整套 UI 走同一套变量。 */
+function _isNum(v){
+  if(typeof v==="number") return isFinite(v);
+  if(typeof v==="string" && v.trim()!=="" && !isNaN(+v)) return true;
+  return false;
+}
+function _niceMax(v){
+  if(!isFinite(v)||v<=0) return 1;
+  const p=Math.pow(10,Math.floor(Math.log10(v)));
+  for(const m of [1,2,2.5,5,10]){ if(m*p>=v) return m*p }
+  return 10*p;
+}
+function _shortLabel(v){
+  const s=String(v==null?"":v);
+  return s.length>7? s.slice(0,6)+"…" : s;
+}
+function renderChart(cols, rows){
+  if(!cols || cols.length<2 || !rows || rows.length<2 || rows.length>60) return "";
+  const numCols=[];
+  for(let i=1;i<cols.length && numCols.length<3;i++){
+    let ok=0;
+    for(const r of rows) if(_isNum(r[i])) ok++;
+    if(ok>=rows.length*0.6) numCols.push(i);
+  }
+  if(!numCols.length) return "";
+  const lname=String(cols[0]).toLowerCase();
+  const isTime = ["dt","date","day","日期"].includes(lname) ||
+    rows.slice(0,8).every(r=>/^\d{4}-\d{2}(-\d{2})?/.test(String(r[0]||"").trim()));
+  try{
+    return isTime ? _lineChart(rows,numCols,cols) : _barChart(rows,numCols[0],cols);
+  }catch(e){ return "" }
+}
+function _axisNum(v){
+  if(v>=10000){ const w=v/10000; return (Math.round(w*100)/100)+"w" }
+  return (+v.toFixed(2)).toLocaleString();
+}
+function _lineChart(rows, numCols, cols){
+  const W=560,H=190,L=56,R=12,T=14,B=26;
+  const iw=W-L-R, ih=H-T-B;
+  const all=[]; for(const r of rows) for(const ci of numCols) if(_isNum(r[ci])) all.push(+r[ci]);
+  const vmax=_niceMax(Math.max(...all,0)||1);
+  const colors=["#2563eb","#f59e0b","#15803d"];
+  const xs=i=> rows.length===1 ? L+iw/2 : L+iw*i/(rows.length-1);
+  const y=v=> T+ih*(1-v/vmax);
+  let g="";
+  for(let k=0;k<=3;k++){
+    const vv=vmax*k/3, yy=y(vv);
+    g+=`<line x1="${L}" y1="${yy}" x2="${W-R}" y2="${yy}" stroke="#ececea" stroke-width="1"/>`+
+       `<text x="${L-6}" y="${yy+3}" text-anchor="end" font-size="9.5" fill="#a1a1aa" font-family="ui-monospace">${_axisNum(vv)}</text>`;
+  }
+  const xt=i=>String(rows[i][0]||"").slice(5,10);
+  g+=`<text x="${xs(0)}" y="${H-8}" text-anchor="middle" font-size="9.5" fill="#a1a1aa" font-family="ui-monospace">${xt(0)}</text>`;
+  if(rows.length>6) g+=`<text x="${xs(Math.floor((rows.length-1)/2))}" y="${H-8}" text-anchor="middle" font-size="9.5" fill="#a1a1aa" font-family="ui-monospace">${xt(Math.floor((rows.length-1)/2))}</text>`;
+  if(rows.length>1) g+=`<text x="${xs(rows.length-1)}" y="${H-8}" text-anchor="middle" font-size="9.5" fill="#a1a1aa" font-family="ui-monospace">${xt(rows.length-1)}</text>`;
+  numCols.forEach((ci,si)=>{
+    const pts=rows.map((r,i)=>`${xs(i)},${y(_isNum(r[ci])?+r[ci]:0)}`).join(" ");
+    if(si===0){
+      g+=`<polygon points="${L},${T+ih} ${pts} ${W-R},${T+ih}" fill="url(#agrad)" opacity=".12"/>`;
+    }
+    g+=`<polyline points="${pts}" fill="none" stroke="${colors[si]}" stroke-width="1.8"
+      stroke-linejoin="round" stroke-linecap="round"/>`;
+    if(rows.length<=16) rows.forEach((r,i)=>{
+      g+=`<circle cx="${xs(i)}" cy="${y(_isNum(r[ci])?+r[ci]:0)}" r="2.2" fill="${colors[si]}"/>`;
+    });
+  });
+  const last=rows[rows.length-1];
+  const legend=numCols.map((ci,si)=>`<span><i style="background:${colors[si]}"></i>${esc(cols[ci])}</span>`).join("");
+  return `<div class="chart"><svg viewBox="0 0 ${W} ${H}" role="img">
+    <defs><linearGradient id="agrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="${colors[0]}"/><stop offset="1" stop-color="${colors[0]}" stop-opacity="0"/></linearGradient></defs>
+    ${g}</svg>
+    <div class="cnote">${legend}　最近值 <b>${fmt(last[numCols[0]])}</b>（${esc(_shortLabel(last[0]))}）</div></div>`;
+}
+function _barChart(rows, ci, cols){
+  const W=560, rowH=24, T=6, B=6;
+  const shown=rows.slice(0,15);
+  const H=T+B+shown.length*rowH;
+  const max=Math.max(...shown.map(r=>_isNum(r[ci])?Math.abs(+r[ci]):0),0)||1;
+  const L=64, R=86, iw=W-L-R;
+  let g="";
+  shown.forEach((r,i)=>{
+    const v=_isNum(r[ci])?+r[ci]:0;
+    const w=Math.max(Math.abs(v)/max*iw, 1.5);
+    const yy=T+i*rowH;
+    g+=`<text x="${L-8}" y="${yy+rowH/2+3}" text-anchor="end" font-size="10" fill="#52525b" font-family="ui-monospace">${esc(_shortLabel(r[0]))}</text>`+
+       `<rect x="${L}" y="${yy+5}" width="${w}" height="${rowH-11}" rx="3" fill="#2563eb" opacity="${0.85-0.035*i}"/>`+
+       `<text x="${L+w+6}" y="${yy+rowH/2+3.5}" font-size="10" fill="#18181b" font-family="ui-monospace">${fmt(v)}</text>`;
+  });
+  const note=rows.length>15?`<div class="cnote">只画前 15 行，共 ${rows.length} 行；完整分布见下方表格。</div>`:"";
+  return `<div class="chart"><svg viewBox="0 0 ${W} ${H}" role="img">${g}</svg>${note}</div>`;
+}
+
+function mdText(s){
+  return esc(s||"").replace(/\*\*(.+?)\*\*/g,"<b>$1</b>")
+                    .replace(/`([^`]+)`/g,"<code>$1</code>");
+}
+function renderMetaAnswer(st){
+  const k=(st.meta_intent||{}).kind||"说明";
+  const label={help:"能力说明",explain:"口径解释",offscope:"通用回答"}[k]||k;
+  return `<div class="card"><div class="card-top"><h2>${esc(label)}</h2>
+    <span class="tag info">未查询数仓</span>
+    <span class="tag">${esc(k)}</span></div>
+    <div class="card-body"><div class="details-meta">${mdText(st.answer||"")}</div>
+    ${foldTrace(st)}</div></div>`;
+}
+function cover(st){
+  const a=st.time_start,b=st.time_end;
+  return a&&b?(a===b?a:`${a} ~ ${b}`):"—";
+}
+function tablesFromSql(sql){
+  const out=[],re=/\b(?:FROM|JOIN)\s+([A-Za-z_][\w.]*)/gi;let m;
+  while((m=re.exec(sql))!==null){
+    const t=m[1].split(".").pop();
+    if(t&&!out.includes(t)) out.push(t);
+  }
+  return out;
+}
+function sqlBox(sql, label){
+  if(!sql) return `<div class="note info">没有生成 SQL（拒答或直连调试）。</div>`;
+  return `<div class="sqlbox"><div class="bar">${esc(label||"SQL · Doris(hive_catalog)")}
+    <button onclick="cp(this)">复制</button></div><pre>${esc(sql)}</pre></div>`;
+}
+function cp(btn){
+  const t=btn.closest(".sqlbox").querySelector("pre").textContent;
+  navigator.clipboard.writeText(t).then(()=>{btn.textContent="已复制";setTimeout(()=>btn.textContent="复制",1400)});
+}
+function rawBlock(txt){
+  return txt?`<details class="raw"><summary>查看纯文本答案</summary><pre>${esc(txt)}</pre></details>`:"";
+}
+
+/* 执行过程默认不展开。
+   它是有用的证据（护栏拦了什么、SQL 改了几版），但对问数的人只是噪音；
+   所以折在答案卡底部，一句话说明里面有几步，想看再点开。 */
+function foldTrace(st, tech){
+  const steps=st.trace||[];
+  if(!steps.length && !(st.findings||[]).length && !tech) return "";
+  const n=steps.length, ms=st.elapsed_ms||0;
+  const sqlN=(st.history||[]).filter(x=>x.sql).length;
+  const bits=[`${n} 步`,`${ms} ms`];
+  if(sqlN) bits.push(`SQL ${sqlN} 版`);
+  const rej=(st.findings||[]).filter(f=>f.level==="REJECT").length;
+  const warn=(st.findings||[]).filter(f=>f.level==="WARN").length;
+  if(rej) bits.push(`拦截 ${rej}`);
+  if(warn) bits.push(`提示 ${warn}`);
+  return `<details class="fold"><summary>执行过程与技术细节</summary>
+    <div class="fold-body"><span class="hint">${bits.join(" · ")}</span>
+    ${traceDAG(st)}${tech||""}${traceHTML(st)}</div></details>`;
+}
+function traceHTML(st){
+  const steps=st.trace||[], findings=st.findings||[], hist=st.history||[], fixes=st.fix_log||[];
+  let h="";
+  // 时间解析摘要
+  const w=st.time_window||{};
+  if(w.label){
+    h+=`<div class="section-title">时间解析</div>
+      <div class="step info"><div class="h"><b>${esc(w.sql_hint||"—")}</b></div>
+      <div class="d">${esc(w.label)}｜状态 ${esc(w.status||"")}${w.requested?`｜原请求 ${esc(w.requested.join(" ~ "))}`:""}</div></div>`;
+  }
+  const mh=(st.metric_hits||[]).map(x=>
+    `<span class="badge ok">${esc(x.matched_by||"")} → ${esc(x.code||"")}</span>`).join("");
+  if((st.dimensions||[]).length || mh){
+    h+=`<div class="section-title">命中维度 / 语义检索</div>
+      <div class="step info">${mh?`<div class="d">${mh}</div>`:""}
+      ${(st.dimensions||[]).length?`<div class="d">维度 ${(st.dimensions||[]).map(x=>`<span class="badge info">${esc(x)}</span>`).join("")}</div>`:""}
+      <div class="d" style="color:var(--faint)">候选表 ${(st.tables||[]).map(esc).join(" · ")||"—"}</div></div>`;
+  }
+  if(steps.length){
+    h+=`<div class="section-title">节点执行（${steps.length}）</div><div class="steps">`;
+    steps.forEach((s,i)=>{
+      const cls=classOf(s.node,s.detail);
+      const data=s.data&&Object.keys(s.data).length
+        ?`<details><summary>展开数据</summary><pre>${esc(JSON.stringify(s.data,null,1))}</pre></details>`:"";
+      h+=`<div class="step ${cls}"><div class="h"><b>${esc(s.node)}</b><span class="n">${i+1}</span></div>
+        <div class="d">${esc(s.detail||"")}</div>${data}</div>`;
+    });
+    h+=`</div>`;
+  }
+  if(findings.length){
+    h+=`<div class="section-title">护栏结果</div><div>`+findings.map(f=>
+      `<span class="badge ${f.level==="REJECT"?"err":f.level==="WARN"?"warn":"info"}">${esc(f.rule)} · ${esc(f.level)}</span>`).join("")+`</div>`;
+  }
+  const sqls=hist.filter(x=>x.sql);
+  if(sqls.length){
+    h+=`<div class="section-title">SQL 演化（${sqls.length} 版）</div>`;
+    sqls.forEach(x=>{h+=`<div class="evol"><div class="eh"><span class="stage">第 ${esc(x.attempt)} 轮 · ${esc(x.stage)}</span>
+      <span>${esc(x.verdict||"")}</span></div><pre>${esc(x.sql)}</pre></div>`});
+  }
+  if(fixes.length){
+    h+=`<div class="section-title">机械修复动作</div>`+fixes.map(f=>`<div class="fixline">${esc(f)}</div>`).join("");
+  }
+  return h;
+}
+function classOf(node,detail){
+  const s=(node+" "+(detail||"")).toLowerCase();
+  // 顺序很重要：护栏 detail 是「pass（REJECT 0 / WARN 0）」这种带计数的句子，
+  // 先判通过再判拦截，否则全过也会被标红
+  if(/pass|通过|已包装|ok/.test(s) && !/未通过/.test(s)) return "ok";
+  if(/reject|拒答|refuse|error|失败|未通过/.test(s)) return "err";
+  if(/warn|截断|truncated/.test(s)) return "warn";
+  return "info";
+}
+boot();
+</script>
+</body>
+</html>

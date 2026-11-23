@@ -1,0 +1,91 @@
+# 密钥：本地环境变量，绝不入库
+code/agent/.env
+.env
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+code/agent/venv/
+code/agent/_wheels/
+
+# 数据与临时产物
+*.log
+code/agent/.run/
+# 自带 Redis 的快照文件。third_party 里的二进制要入库，但运行时数据不要
+*.rdb
+
+# 一键部署（AC-20）：PG 二进制 124MB、数据目录 90MB，都不入库。
+# 仓库里只留 setup.ps1 / start.ps1 —— 拿到仓库的人跑一次 setup 就有了。
+# Redis 不同：2.4MB，直接入库（third_party/redis-win64）。
+third_party/pgsql/
+third_party/pgdata/
+third_party/logs/
+# 2026-11-15：BGE 中文 ONNX 模型 91MB，换机器从 hf-mirror 重下即可，不入库。
+# 下载方式见 docs/61 §九。
+third_party/embedding_models/
+
+# 2026-11-15：入仓范围收窄。只把「代码 / 文档 / 评测 / SQL / 配置 / 看板」放进来，
+# 运行期数据、构建产物、临时抓取、第三方课程资料一律不入库。
+# 注意这里是**锚定根目录**的写法（前导 /）：不锚定的话 `agent/` 会把
+# `code/agent/` 一起吞掉，等于把整个 Agent 源码排除在仓库外。
+/data/
+/.workbuddy/
+/.tmp_read/
+/dist/
+/figures/
+/review/
+
+# `agent/` 不能整目录排除：guard.py（27 条护栏）与 semantic/*.yaml 是运行时必需，
+# config.yaml 里写死 `script: agent/guards/guard.py` / `metrics_yaml: agent/semantic/metrics.yaml`。
+# 排掉它，clone 出来的仓库读不到指标、调不到护栏。只排编译缓存。
+/agent/**/__pycache__/
+
+# Flink 课程资料：6.8GB 的 tar.gz / rpm / docx，零项目代码（只有一个 gitee 地址 txt）。
+# 排掉后仓库从 7.1GB 降到 18.8MB。
+/flink/
+# PG 便携版压缩包 323MB。解压后走 third_party/pgsql/ 的路径，同样不入库（见下）。
+/code/platform/_pg/
+
+# 手工快照目录：入仓前用文件系统备份，入仓后由 git 接管。
+/bak_2026*/
+
+# PyCharm：.idea 里的模块定义和运行配置是团队共享的（手写的），
+# 但工作区、解释器路径、检查配置是每个人自己的，不入库
+code/agent/.idea/workspace.xml
+code/agent/.idea/vcs.xml
+code/agent/.idea/misc.xml
+code/agent/.idea/shelf/
+code/agent/.idea/inspectionProfiles/
+*.iws
+
+# ============================================================
+# 2026-11-23 公开仓库收窄：以下文件不进入公开分支
+# （原 master 的历史与文件本身保留在本地，不受影响）
+# ============================================================
+# IDE 个人配置
+code/agent/.idea/
+agent/.idea/
+# eval 调试临时产物与历次报告（只留 cases/baseline/last/report.md/运行器）
+eval/_*
+eval/report_2026*.md
+eval/report_partial*.md
+eval/history.html
+eval/last3.json
+eval/last_quick.json
+# 求职/交接/工单/日志类文档：公开仓库只留 7 份技术文档白名单
+docs/*
+!docs/00-README-文档导航.md
+!docs/20-指标字典定义.md
+!docs/22-双链路架构图.md
+!docs/52-口径机检.md
+!docs/57-面试宝典-离线实时与Agent.md
+!docs/61-端到端复测与开关AB.md
+!docs/64-长期偏好设计.md
+docs/render_57_html.py
+docs/figures/
+docs/bench_curve.png
+
+# 求职/交接总文档，不公开
+/音乐数仓毕设与求职项目_交接文档.md

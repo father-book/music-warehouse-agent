@@ -1,0 +1,1090 @@
+{
+ "generated_at": "2026-11-14T13:30:08",
+ "limit": 17,
+ "arms": [
+  "off",
+  "cot",
+  "fewshot",
+  "cot+fewshot"
+ ],
+ "results": {
+  "off": {
+   "guard_pass": 17,
+   "table_match": 14,
+   "n": 17,
+   "tok": 34625,
+   "cost": 0.08043399999999999,
+   "fail": 0,
+   "sec": 245.80567336082458
+  },
+  "cot": {
+   "guard_pass": 17,
+   "table_match": 14,
+   "n": 17,
+   "tok": 37627,
+   "cost": 0.092414,
+   "fail": 0,
+   "sec": 251.72612166404724
+  },
+  "fewshot": {
+   "guard_pass": 17,
+   "table_match": 14,
+   "n": 17,
+   "tok": 36981,
+   "cost": 0.08485199999999998,
+   "fail": 0,
+   "sec": 255.51716113090515
+  },
+  "cot+fewshot": {
+   "guard_pass": 17,
+   "table_match": 14,
+   "n": 17,
+   "tok": 40086,
+   "cost": 0.09765599999999999,
+   "fail": 0,
+   "sec": 233.92591619491577
+  }
+ },
+ "detail": [
+  {
+   "id": "N03",
+   "arm": "off",
+   "ok": true,
+   "guard": "pass",
+   "table_match": false,
+   "got": [
+    "dim_song",
+    "dwd_play_start"
+   ],
+   "exp": [
+    "dwd_play_start"
+   ],
+   "sql": "SELECT s.song_id, s.song_name, COUNT(*) AS play_start_cnt FROM dwd_play_start p LEFT JOIN dim_song s ON p.song_id = s.song_id WHERE p.dt = '2026-11-08' GROUP BY s.song_id, s.song_name ORDER BY play_start_cnt DESC LIMIT 1",
+   "rejects": []
+  },
+  {
+   "id": "N03",
+   "arm": "cot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": false,
+   "got": [
+    "dim_song",
+    "dwd_play_start"
+   ],
+   "exp": [
+    "dwd_play_start"
+   ],
+   "sql": "SELECT s.song_id, s.song_name, COUNT(*) AS play_start_cnt FROM dwd_play_start p LEFT JOIN dim_song s ON p.song_id = s.song_id WHERE p.dt = '2026-11-08' GROUP BY s.song_id, s.song_name ORDER BY play_start_cnt DESC LIMIT 1",
+   "rejects": []
+  },
+  {
+   "id": "N03",
+   "arm": "fewshot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": false,
+   "got": [
+    "dim_song",
+    "dwd_play_start"
+   ],
+   "exp": [
+    "dwd_play_start"
+   ],
+   "sql": "SELECT s.song_id, s.song_name, COUNT(*) AS play_start_cnt FROM dwd_play_start p LEFT JOIN dim_song s ON p.song_id = s.song_id WHERE p.dt = '2026-11-08' GROUP BY s.song_id, s.song_name ORDER BY play_start_cnt DESC LIMIT 1",
+   "rejects": []
+  },
+  {
+   "id": "N03",
+   "arm": "cot+fewshot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": false,
+   "got": [
+    "dim_song",
+    "dwd_play_start"
+   ],
+   "exp": [
+    "dwd_play_start"
+   ],
+   "sql": "SELECT s.song_id, s.song_name, COUNT(*) AS play_start_cnt FROM dwd_play_start p LEFT JOIN dim_song s ON p.song_id = s.song_id WHERE p.dt = '2026-11-08' GROUP BY s.song_id, s.song_name ORDER BY play_start_cnt DESC LIMIT 1",
+   "rejects": []
+  },
+  {
+   "id": "N01",
+   "arm": "off",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dwd_session"
+   ],
+   "exp": [
+    "dwd_session"
+   ],
+   "sql": "SELECT COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id)) AS uv FROM dwd_session WHERE dt = '2026-11-08' AND event_name = 'app_launch'",
+   "rejects": []
+  },
+  {
+   "id": "N01",
+   "arm": "cot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dwd_session"
+   ],
+   "exp": [
+    "dwd_session"
+   ],
+   "sql": "SELECT COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id)) AS uv FROM dwd_session WHERE dt = '2026-11-08' AND event_name = 'app_launch'",
+   "rejects": []
+  },
+  {
+   "id": "N01",
+   "arm": "fewshot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dwd_session"
+   ],
+   "exp": [
+    "dwd_session"
+   ],
+   "sql": "SELECT COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id)) AS uv FROM dwd_session WHERE dt = '2026-11-08' AND event_name = 'app_launch'",
+   "rejects": []
+  },
+  {
+   "id": "N01",
+   "arm": "cot+fewshot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dwd_session"
+   ],
+   "exp": [
+    "dwd_session"
+   ],
+   "sql": "SELECT COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id)) AS uv FROM dwd_session WHERE dt = '2026-11-08' AND event_name = 'app_launch'",
+   "rejects": []
+  },
+  {
+   "id": "P02",
+   "arm": "off",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dwd_session"
+   ],
+   "exp": [
+    "dwd_session"
+   ],
+   "sql": "SELECT province, COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id)) AS uv FROM dwd_session WHERE dt = '2026-11-08' AND event_name = 'app_launch' GROUP BY province ORDER BY uv DESC",
+   "rejects": []
+  },
+  {
+   "id": "P02",
+   "arm": "cot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dwd_session"
+   ],
+   "exp": [
+    "dwd_session"
+   ],
+   "sql": "SELECT province, COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id)) AS v FROM dwd_session WHERE dt = '2026-11-08' AND event_name = 'app_launch' GROUP BY province ORDER BY v DESC",
+   "rejects": []
+  },
+  {
+   "id": "P02",
+   "arm": "fewshot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dwd_session"
+   ],
+   "exp": [
+    "dwd_session"
+   ],
+   "sql": "SELECT province, COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id)) AS uv FROM dwd_session WHERE dt = '2026-11-08' AND event_name = 'app_launch' GROUP BY province ORDER BY uv DESC",
+   "rejects": []
+  },
+  {
+   "id": "P02",
+   "arm": "cot+fewshot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dwd_session"
+   ],
+   "exp": [
+    "dwd_session"
+   ],
+   "sql": "SELECT province, COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id)) AS uv FROM dwd_session WHERE dt = '2026-11-08' AND event_name = 'app_launch' GROUP BY province ORDER BY uv DESC",
+   "rejects": []
+  },
+  {
+   "id": "N04",
+   "arm": "off",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dim_song",
+    "dwd_play_start"
+   ],
+   "exp": [
+    "dim_song",
+    "dwd_play_start"
+   ],
+   "sql": "SELECT p.song_id, s.song_name, s.singer, COUNT(*) AS play_start_cnt FROM dwd_play_start p LEFT JOIN dim_song s ON p.song_id = s.song_id WHERE p.dt = '2026-11-08' GROUP BY p.song_id, s.song_name, s.singer ORDER BY play_start_cnt DESC LIMIT 3",
+   "rejects": []
+  },
+  {
+   "id": "N04",
+   "arm": "cot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dim_song",
+    "dwd_play_start"
+   ],
+   "exp": [
+    "dim_song",
+    "dwd_play_start"
+   ],
+   "sql": "SELECT s.song_name, s.singer, COUNT(*) AS play_start_cnt FROM dwd_play_start p JOIN dim_song s ON p.song_id = s.song_id WHERE p.dt = '2026-11-08' GROUP BY s.song_name, s.singer ORDER BY play_start_cnt DESC LIMIT 3",
+   "rejects": []
+  },
+  {
+   "id": "N04",
+   "arm": "fewshot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dim_song",
+    "dwd_play_start"
+   ],
+   "exp": [
+    "dim_song",
+    "dwd_play_start"
+   ],
+   "sql": "SELECT s.song_name, COUNT(*) AS play_start_cnt FROM dwd_play_start p JOIN dim_song s ON p.song_id = s.song_id WHERE p.dt = '2026-11-08' GROUP BY s.song_name ORDER BY play_start_cnt DESC LIMIT 3",
+   "rejects": []
+  },
+  {
+   "id": "N04",
+   "arm": "cot+fewshot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dim_song",
+    "dwd_play_start"
+   ],
+   "exp": [
+    "dim_song",
+    "dwd_play_start"
+   ],
+   "sql": "SELECT s.song_name, COUNT(*) AS play_start_cnt FROM dwd_play_start p JOIN dim_song s ON p.song_id = s.song_id WHERE p.dt = '2026-11-08' GROUP BY s.song_name ORDER BY play_start_cnt DESC LIMIT 3",
+   "rejects": []
+  },
+  {
+   "id": "N05",
+   "arm": "off",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dwd_pay",
+    "dwd_session"
+   ],
+   "exp": [
+    "dwd_pay",
+    "dwd_session"
+   ],
+   "sql": "SELECT (SELECT COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id)) FROM dwd_pay WHERE dt = '2026-11-08' AND event_name IN ('vip_subscribe', 'order_pay')) / NULLIF((SELECT COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id)) FROM dwd_session WHERE dt = '2026-11-08'), 0) AS pay_rate",
+   "rejects": []
+  },
+  {
+   "id": "N05",
+   "arm": "cot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dwd_pay",
+    "dwd_session"
+   ],
+   "exp": [
+    "dwd_pay",
+    "dwd_session"
+   ],
+   "sql": "SELECT (SELECT COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id)) FROM dwd_pay WHERE dt = '2026-11-08' AND event_name IN ('vip_subscribe', 'order_pay')) / NULLIF((SELECT COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id)) FROM dwd_session WHERE dt = '2026-11-08'), 0) AS pay_rate",
+   "rejects": []
+  },
+  {
+   "id": "N05",
+   "arm": "fewshot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dwd_pay",
+    "dwd_session"
+   ],
+   "exp": [
+    "dwd_pay",
+    "dwd_session"
+   ],
+   "sql": "SELECT (SELECT COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id)) FROM dwd_pay WHERE dt = '2026-11-08' AND event_name IN ('vip_subscribe', 'order_pay')) / NULLIF((SELECT COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id)) FROM dwd_session WHERE dt = '2026-11-08'), 0) AS pay_rate",
+   "rejects": []
+  },
+  {
+   "id": "N05",
+   "arm": "cot+fewshot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dwd_pay",
+    "dwd_session"
+   ],
+   "exp": [
+    "dwd_pay",
+    "dwd_session"
+   ],
+   "sql": "SELECT (SELECT COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id)) FROM dwd_pay WHERE dt = '2026-11-08' AND event_name IN ('vip_subscribe', 'order_pay')) / NULLIF((SELECT COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id)) FROM dwd_session WHERE dt = '2026-11-08'), 0) AS pay_rate",
+   "rejects": []
+  },
+  {
+   "id": "N06",
+   "arm": "off",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dws_genre_daily"
+   ],
+   "exp": [
+    "dws_genre_daily"
+   ],
+   "sql": "SELECT COUNT(DISTINCT genre) AS genre_cnt FROM dws_genre_daily WHERE dt = '2026-11-08' AND play_start_cnt > 0",
+   "rejects": []
+  },
+  {
+   "id": "N06",
+   "arm": "cot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dws_genre_daily"
+   ],
+   "exp": [
+    "dws_genre_daily"
+   ],
+   "sql": "SELECT COUNT(DISTINCT genre) AS genre_cnt FROM dws_genre_daily WHERE dt = '2026-11-08' AND play_start_cnt > 0",
+   "rejects": []
+  },
+  {
+   "id": "N06",
+   "arm": "fewshot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dws_genre_daily"
+   ],
+   "exp": [
+    "dws_genre_daily"
+   ],
+   "sql": "SELECT COUNT(DISTINCT genre) AS genre_cnt FROM dws_genre_daily WHERE dt = '2026-11-08' AND play_start_cnt > 0",
+   "rejects": []
+  },
+  {
+   "id": "N06",
+   "arm": "cot+fewshot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dws_genre_daily"
+   ],
+   "exp": [
+    "dws_genre_daily"
+   ],
+   "sql": "SELECT COUNT(DISTINCT genre) AS genre_cnt FROM dws_genre_daily WHERE dt = '2026-11-08' AND play_start_cnt > 0",
+   "rejects": []
+  },
+  {
+   "id": "N07",
+   "arm": "off",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dws_genre_daily"
+   ],
+   "exp": [
+    "dws_genre_daily"
+   ],
+   "sql": "SELECT genre, SUM(play_start_cnt) AS v FROM dws_genre_daily WHERE dt = '2026-11-08' GROUP BY genre ORDER BY v DESC LIMIT 1",
+   "rejects": []
+  },
+  {
+   "id": "N07",
+   "arm": "cot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dws_genre_daily"
+   ],
+   "exp": [
+    "dws_genre_daily"
+   ],
+   "sql": "SELECT genre, play_start_cnt AS v FROM dws_genre_daily WHERE dt = '2026-11-08' ORDER BY v DESC LIMIT 1",
+   "rejects": []
+  },
+  {
+   "id": "N07",
+   "arm": "fewshot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dws_genre_daily"
+   ],
+   "exp": [
+    "dws_genre_daily"
+   ],
+   "sql": "SELECT genre, SUM(play_start_cnt) AS v FROM dws_genre_daily WHERE dt = '2026-11-08' GROUP BY genre ORDER BY v DESC LIMIT 1",
+   "rejects": []
+  },
+  {
+   "id": "N07",
+   "arm": "cot+fewshot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dws_genre_daily"
+   ],
+   "exp": [
+    "dws_genre_daily"
+   ],
+   "sql": "SELECT genre, play_start_cnt AS v FROM dws_genre_daily WHERE dt = '2026-11-08' ORDER BY v DESC LIMIT 1",
+   "rejects": []
+  },
+  {
+   "id": "C01",
+   "arm": "off",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dwd_interaction"
+   ],
+   "exp": [
+    "dwd_interaction"
+   ],
+   "sql": "SELECT COUNT(*) AS interact_cnt FROM dwd_interaction WHERE dt = '2026-11-08' AND event_name IN ('collect','like','share','comment','download','follow_artist','playlist_add')",
+   "rejects": []
+  },
+  {
+   "id": "C01",
+   "arm": "cot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dwd_interaction"
+   ],
+   "exp": [
+    "dwd_interaction"
+   ],
+   "sql": "SELECT COUNT(*) AS interact_cnt FROM dwd_interaction WHERE dt = '2026-11-08' AND event_name IN ('collect','like','share','comment','download','follow_artist','playlist_add')",
+   "rejects": []
+  },
+  {
+   "id": "C01",
+   "arm": "fewshot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dwd_interaction"
+   ],
+   "exp": [
+    "dwd_interaction"
+   ],
+   "sql": "SELECT COUNT(*) AS interact_cnt FROM dwd_interaction WHERE dt = '2026-11-08' AND event_name IN ('collect','like','share','comment','download','follow_artist','playlist_add')",
+   "rejects": []
+  },
+  {
+   "id": "C01",
+   "arm": "cot+fewshot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dwd_interaction"
+   ],
+   "exp": [
+    "dwd_interaction"
+   ],
+   "sql": "SELECT COUNT(*) AS interact_cnt FROM dwd_interaction WHERE dt = '2026-11-08' AND event_name IN ('collect','like','share','comment','download','follow_artist','playlist_add')",
+   "rejects": []
+  },
+  {
+   "id": "V24",
+   "arm": "off",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dwd_session"
+   ],
+   "exp": [
+    "dwd_session"
+   ],
+   "sql": "SELECT province, COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id)) AS uv FROM dwd_session WHERE dt = '2026-11-08' AND event_name = 'app_launch' GROUP BY province ORDER BY uv DESC",
+   "rejects": []
+  },
+  {
+   "id": "V24",
+   "arm": "cot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dwd_session"
+   ],
+   "exp": [
+    "dwd_session"
+   ],
+   "sql": "SELECT province, COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id)) AS v FROM dwd_session WHERE dt = '2026-11-08' AND event_name = 'app_launch' GROUP BY province ORDER BY v DESC",
+   "rejects": []
+  },
+  {
+   "id": "V24",
+   "arm": "fewshot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dwd_session"
+   ],
+   "exp": [
+    "dwd_session"
+   ],
+   "sql": "SELECT province, COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id)) AS uv FROM dwd_session WHERE dt = '2026-11-08' AND event_name = 'app_launch' GROUP BY province ORDER BY uv DESC",
+   "rejects": []
+  },
+  {
+   "id": "V24",
+   "arm": "cot+fewshot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dwd_session"
+   ],
+   "exp": [
+    "dwd_session"
+   ],
+   "sql": "SELECT province, COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id)) AS uv FROM dwd_session WHERE dt = '2026-11-08' AND event_name = 'app_launch' GROUP BY province ORDER BY uv DESC",
+   "rejects": []
+  },
+  {
+   "id": "P04",
+   "arm": "off",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "ods_music_event"
+   ],
+   "exp": [
+    "ods_music_event"
+   ],
+   "sql": "SELECT COUNT(*) AS cnt FROM ods_music_event WHERE dt = '2026-11-08'",
+   "rejects": []
+  },
+  {
+   "id": "P04",
+   "arm": "cot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "ods_music_event"
+   ],
+   "exp": [
+    "ods_music_event"
+   ],
+   "sql": "SELECT COUNT(*) AS record_cnt FROM ods_music_event WHERE dt = '2026-11-08'",
+   "rejects": []
+  },
+  {
+   "id": "P04",
+   "arm": "fewshot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "ods_music_event"
+   ],
+   "exp": [
+    "ods_music_event"
+   ],
+   "sql": "SELECT COUNT(*) AS record_cnt FROM ods_music_event WHERE dt = '2026-11-08'",
+   "rejects": []
+  },
+  {
+   "id": "P04",
+   "arm": "cot+fewshot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "ods_music_event"
+   ],
+   "exp": [
+    "ods_music_event"
+   ],
+   "sql": "SELECT COUNT(*) AS record_cnt FROM ods_music_event WHERE dt = '2026-11-08'",
+   "rejects": []
+  },
+  {
+   "id": "P01",
+   "arm": "off",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dwd_session"
+   ],
+   "exp": [
+    "dwd_session"
+   ],
+   "sql": "SELECT province, COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id)) AS uv FROM dwd_session WHERE dt = '2026-11-08' AND event_name = 'app_launch' GROUP BY province ORDER BY uv DESC",
+   "rejects": []
+  },
+  {
+   "id": "P01",
+   "arm": "cot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dwd_session"
+   ],
+   "exp": [
+    "dwd_session"
+   ],
+   "sql": "SELECT province, COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id)) AS v FROM dwd_session WHERE dt = '2026-11-08' AND event_name = 'app_launch' GROUP BY province ORDER BY v DESC",
+   "rejects": []
+  },
+  {
+   "id": "P01",
+   "arm": "fewshot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dwd_session"
+   ],
+   "exp": [
+    "dwd_session"
+   ],
+   "sql": "SELECT province, COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id)) AS uv FROM dwd_session WHERE dt = '2026-11-08' AND event_name = 'app_launch' GROUP BY province ORDER BY uv DESC",
+   "rejects": []
+  },
+  {
+   "id": "P01",
+   "arm": "cot+fewshot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dwd_session"
+   ],
+   "exp": [
+    "dwd_session"
+   ],
+   "sql": "SELECT province, COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id)) AS uv FROM dwd_session WHERE dt = '2026-11-08' AND event_name = 'app_launch' GROUP BY province ORDER BY uv DESC",
+   "rejects": []
+  },
+  {
+   "id": "V01",
+   "arm": "off",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dwd_session"
+   ],
+   "exp": [
+    "dwd_session"
+   ],
+   "sql": "SELECT COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id)) AS uv FROM dwd_session WHERE dt = '2026-11-08' AND event_name = 'app_launch'",
+   "rejects": []
+  },
+  {
+   "id": "V01",
+   "arm": "cot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dwd_session"
+   ],
+   "exp": [
+    "dwd_session"
+   ],
+   "sql": "SELECT COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id)) AS dau FROM dwd_session WHERE dt = '2026-11-08' AND event_name = 'app_launch'",
+   "rejects": []
+  },
+  {
+   "id": "V01",
+   "arm": "fewshot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dwd_session"
+   ],
+   "exp": [
+    "dwd_session"
+   ],
+   "sql": "SELECT COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id)) AS uv FROM dwd_session WHERE dt = '2026-11-08' AND event_name = 'app_launch'",
+   "rejects": []
+  },
+  {
+   "id": "V01",
+   "arm": "cot+fewshot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dwd_session"
+   ],
+   "exp": [
+    "dwd_session"
+   ],
+   "sql": "SELECT COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id)) AS uv FROM dwd_session WHERE dt = '2026-11-08' AND event_name = 'app_launch'",
+   "rejects": []
+  },
+  {
+   "id": "V03",
+   "arm": "off",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dwd_play_start"
+   ],
+   "exp": [
+    "dwd_play_start"
+   ],
+   "sql": "SELECT COUNT(*) AS play_start_cnt FROM dwd_play_start WHERE dt = '2026-11-08'",
+   "rejects": []
+  },
+  {
+   "id": "V03",
+   "arm": "cot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dwd_play_start"
+   ],
+   "exp": [
+    "dwd_play_start"
+   ],
+   "sql": "SELECT COUNT(*) AS play_start_cnt FROM dwd_play_start WHERE dt = '2026-11-08'",
+   "rejects": []
+  },
+  {
+   "id": "V03",
+   "arm": "fewshot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dwd_play_start"
+   ],
+   "exp": [
+    "dwd_play_start"
+   ],
+   "sql": "SELECT COUNT(*) AS play_start_cnt FROM dwd_play_start WHERE dt = '2026-11-08'",
+   "rejects": []
+  },
+  {
+   "id": "V03",
+   "arm": "cot+fewshot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dwd_play_start"
+   ],
+   "exp": [
+    "dwd_play_start"
+   ],
+   "sql": "SELECT COUNT(*) AS play_start_cnt FROM dwd_play_start WHERE dt = '2026-11-08'",
+   "rejects": []
+  },
+  {
+   "id": "V20",
+   "arm": "off",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dwd_session"
+   ],
+   "exp": [
+    "dwd_session"
+   ],
+   "sql": "SELECT COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id)) AS uv FROM dwd_session WHERE dt = '2026-11-07' AND event_name = 'app_launch'",
+   "rejects": []
+  },
+  {
+   "id": "V20",
+   "arm": "cot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dwd_session"
+   ],
+   "exp": [
+    "dwd_session"
+   ],
+   "sql": "SELECT COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id)) AS uv FROM dwd_session WHERE dt = '2026-11-07' AND event_name = 'app_launch'",
+   "rejects": []
+  },
+  {
+   "id": "V20",
+   "arm": "fewshot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dwd_session"
+   ],
+   "exp": [
+    "dwd_session"
+   ],
+   "sql": "SELECT COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id)) AS dau FROM dwd_session WHERE dt = '2026-11-07' AND event_name = 'app_launch'",
+   "rejects": []
+  },
+  {
+   "id": "V20",
+   "arm": "cot+fewshot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "dwd_session"
+   ],
+   "exp": [
+    "dwd_session"
+   ],
+   "sql": "SELECT COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id)) AS uv FROM dwd_session WHERE dt = '2026-11-07' AND event_name = 'app_launch'",
+   "rejects": []
+  },
+  {
+   "id": "P03",
+   "arm": "off",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "ods_music_event"
+   ],
+   "exp": [
+    "ods_music_event"
+   ],
+   "sql": "SELECT COUNT(*) AS cnt FROM ods_music_event WHERE dt = '2026-11-08'",
+   "rejects": []
+  },
+  {
+   "id": "P03",
+   "arm": "cot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "ods_music_event"
+   ],
+   "exp": [
+    "ods_music_event"
+   ],
+   "sql": "SELECT COUNT(*) AS record_cnt FROM ods_music_event WHERE dt = '2026-11-08'",
+   "rejects": []
+  },
+  {
+   "id": "P03",
+   "arm": "fewshot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "ods_music_event"
+   ],
+   "exp": [
+    "ods_music_event"
+   ],
+   "sql": "SELECT COUNT(*) AS record_cnt FROM ods_music_event WHERE dt = '2026-11-08'",
+   "rejects": []
+  },
+  {
+   "id": "P03",
+   "arm": "cot+fewshot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": true,
+   "got": [
+    "ods_music_event"
+   ],
+   "exp": [
+    "ods_music_event"
+   ],
+   "sql": "SELECT COUNT(*) AS record_cnt FROM ods_music_event WHERE dt = '2026-11-08'",
+   "rejects": []
+  },
+  {
+   "id": "P08",
+   "arm": "off",
+   "ok": true,
+   "guard": "pass",
+   "table_match": false,
+   "got": [
+    "dwd_play_start"
+   ],
+   "exp": [
+    "dws_song_play_daily"
+   ],
+   "sql": "SELECT COUNT(*) AS play_start_cnt FROM dwd_play_start WHERE dt = '2026-11-08'",
+   "rejects": []
+  },
+  {
+   "id": "P08",
+   "arm": "cot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": false,
+   "got": [
+    "dwd_play_start"
+   ],
+   "exp": [
+    "dws_song_play_daily"
+   ],
+   "sql": "SELECT COUNT(*) AS play_start_cnt FROM dwd_play_start WHERE dt = '2026-11-08'",
+   "rejects": []
+  },
+  {
+   "id": "P08",
+   "arm": "fewshot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": false,
+   "got": [
+    "dwd_play_start"
+   ],
+   "exp": [
+    "dws_song_play_daily"
+   ],
+   "sql": "SELECT COUNT(*) AS play_start_cnt FROM dwd_play_start WHERE dt = '2026-11-08'",
+   "rejects": []
+  },
+  {
+   "id": "P08",
+   "arm": "cot+fewshot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": false,
+   "got": [
+    "dwd_play_start"
+   ],
+   "exp": [
+    "dws_song_play_daily"
+   ],
+   "sql": "SELECT COUNT(*) AS play_start_cnt FROM dwd_play_start WHERE dt = '2026-11-08'",
+   "rejects": []
+  },
+  {
+   "id": "A31",
+   "arm": "off",
+   "ok": true,
+   "guard": "pass",
+   "table_match": false,
+   "got": [
+    "dwd_session"
+   ],
+   "exp": [
+    "dws_user_daily"
+   ],
+   "sql": "SELECT COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id)) AS uv FROM dwd_session WHERE dt = '2026-11-08' AND event_name = 'app_launch'",
+   "rejects": []
+  },
+  {
+   "id": "A31",
+   "arm": "cot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": false,
+   "got": [
+    "dwd_session"
+   ],
+   "exp": [
+    "dws_user_daily"
+   ],
+   "sql": "SELECT COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id)) AS uv FROM dwd_session WHERE dt = '2026-11-08' AND event_name = 'app_launch'",
+   "rejects": []
+  },
+  {
+   "id": "A31",
+   "arm": "fewshot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": false,
+   "got": [
+    "dwd_session"
+   ],
+   "exp": [
+    "dws_user_daily"
+   ],
+   "sql": "SELECT COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id)) AS uv FROM dwd_session WHERE dt = '2026-11-08' AND event_name = 'app_launch'",
+   "rejects": []
+  },
+  {
+   "id": "A31",
+   "arm": "cot+fewshot",
+   "ok": true,
+   "guard": "pass",
+   "table_match": false,
+   "got": [
+    "dwd_session"
+   ],
+   "exp": [
+    "dws_user_daily"
+   ],
+   "sql": "SELECT COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id)) AS uv FROM dwd_session WHERE dt = '2026-11-08' AND event_name = 'app_launch'",
+   "rejects": []
+  }
+ ]
+}

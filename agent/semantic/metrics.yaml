@@ -1,0 +1,808 @@
+# =============================================================================
+# metrics.yaml —— 指标语义层（55 个：28 原子 + 20 派生 + 7 衍生）
+#
+# 依据：docs/20-指标字典定义.md（可执行规格）
+# 与代码的差异已逐条核对，**冲突以实现为准并在此显式标注**，不留给 Agent 猜。
+#
+# 三层结构（docs/20 §1.1）：
+#   atomic  原子：单表 COUNT / SUM / COUNT(DISTINCT)，只有一个来源和一个过滤
+#   derived 派生：原子间四则运算，不含维度修饰
+#   typed   衍生：派生 + 维度/时间修饰，不可再复用
+#
+# baseline 只在**实测过**的指标上给出，value 是对 2026-10-05~2026-11-08
+# 这 35 天窗口按「分子分母各自求和后重算」得到的结果；未实测的指标不写 baseline
+# （留空 ≠ 0，不要当成 0 用）。
+# =============================================================================
+version: 1
+verified_at: "2026-11-09"
+window: ["2026-10-05", "2026-11-08"]
+
+# 三条口径铁律（docs/20 §1.3 + §4.1），Agent 每次生成 SQL 都要自检
+iron_rules:
+  - id: R-A
+    rule: "比率类指标跨时间/维度聚合，必须 SUM(分子)/SUM(分母) 重算，禁止 AVG(比率字段)"
+    why: "日级比率是加权平均才有意义；AVG 会把小样本日和大样本日等权，结果偏差可到 3 个百分点"
+  - id: R-B
+    rule: "同比/环比的第一个周期为 NULL，不允许用 0 或前值填充"
+    why: "填充会把「无对比基准」伪装成「零增长」"
+  - id: R-C
+    rule: "金额列一律 DECIMAL(18,2)，只在最终展示时 ROUND，中间不转 DOUBLE"
+    why: "SUM 中途退化成 DOUBLE 会引入假精度"
+
+# ---------------------------------------------------------------------------
+# 2026-11-09 两处结构性修正（不是加注释，是改字段）：
+#
+# ① realtime -> availability
+#    旧字段混着 bool（37 个 True）与 str（6 个 approx / 12 个 offline_only），
+#    而执行面只有 hive_catalog 离线库、实时链路又停在 2026-11-08。
+#    Agent 读到 realtime: True 会以为能查实时，实际查不到或查到停更旧数。
+#    现在统一 offline_only，数据截止日由下面 global 块给出。
+#
+# ② 新增 additivity —— 这是「能不能 SUM」的唯一依据（护栏 R20 / R8 读它）
+#    full  可跨日相加，含义不变（各类 cnt、时长、金额）
+#    semi  当日去重实体数，跨日相加后语义变成「人日」，不等于去重 UV
+#          （uv / play_uv / pay_uv —— 就是 113,131 vs 23,212 那个坑）
+#    none  比率/均值/单价，跨日一律不可加，必须 SUM(分子)/SUM(分母) 重算
+# ---------------------------------------------------------------------------
+global:
+  availability: offline_only
+  data_until: "2026-11-08"     # 全库最新分区；实时链路自 11-08 后未再产出
+  realtime_lane: down          # 实时链路状态，Agent 不得据此回答「现在／今天」
+  max_lag_hours: null
+
+metrics:
+
+  # ======================================================= 一、原子指标 28
+  launch_cnt:
+    name_cn: 启动次数
+    tier: atomic
+    formula: "COUNT(*)"
+    source: dwd_session
+    filter: "event_name = 'app_launch'"
+    unit: count
+    availability: offline_only
+    additivity: full
+
+  uv:
+    name_cn: 活跃用户数
+    tier: atomic
+    formula: "COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id))"
+    source: dwd_session
+    filter: "event_name = 'app_launch'"
+    unit: count
+    availability: offline_only
+    additivity: semi
+    note: "「用户为主体、游客按设备补」：登录用户按 user_id 去重，游客按 device_id 去重（命名空间不重叠）。**不能换成 dwd_play_start**：2026-11-09 实测 11-08 启动口径 3,237 人、播放口径 2,525 人，差 22%，差额是启动了但没播的人"
+    baseline: 23212
+    baseline_note: "**35 天窗口去重**（10-05~11-08）。逐日 dau 之和是 113,131（日均 3,232.3，区间 3,223~3,243），那是「人日」不是「人」，两者差 4.87 倍，**不能互相替代**：问『35 天有多少活跃用户』答 23,212，问『日均 DAU』答 3,232.3"
+
+  session_cnt:
+    name_cn: 会话数
+    tier: atomic
+    formula: "COUNT(DISTINCT session_id)"
+    source: dwd_session
+    unit: count
+    availability: offline_only
+    additivity: full
+    note: "2026-11-09 起 ads_daily_overview.session_cnt 与本指标同源（app_launch），全量 114,450；旧版 ADS 只统计**有起播的会话**（89,189），低 22%，该差异已消除"
+    baseline: 114450
+    baseline_note: "dwd_session app_launch 全量去重；ads_daily_overview.session_cnt 35 天合计与本值相等"
+
+  session_duration_sum:
+    name_cn: 会话总时长
+    tier: atomic
+    formula: "SUM(stay_duration)"
+    source: dwd_session
+    filter: "event_name = 'app_exit'"
+    unit: second
+    availability: offline_only
+    additivity: full
+
+  impression_cnt:
+    name_cn: 曝光次数
+    tier: atomic
+    formula: "COUNT(*)"
+    source: dwd_impression
+    unit: count
+    availability: offline_only
+    additivity: full
+    baseline: 2229725
+
+  click_cnt:
+    name_cn: 点击次数
+    tier: atomic
+    formula: "COUNT(*)"
+    source: dwd_click
+    unit: count
+    availability: offline_only
+    additivity: full
+    baseline: 445945
+
+  play_start_cnt:
+    name_cn: 起播次数
+    tier: atomic
+    formula: "COUNT(*)"
+    source: dwd_play_start
+    unit: count
+    availability: offline_only
+    additivity: full
+    baseline: 445945
+
+  play_uv:
+    name_cn: 播放用户数
+    tier: atomic
+    formula: "COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id))"
+    source: dwd_play_start
+    unit: count
+    availability: offline_only
+    additivity: semi
+    note: "与 uv 同一条实体规则：登录按 user_id、游客按 device_id。**不要写成裸 COUNT(DISTINCT user_id)**——那会把全体游客压成 1 个（35 天实测：正确 20,731，裸 user_id 只剩 16,280，少 21%）。注意本指标只覆盖『有起播的人』，一定小于等于 uv（启动口径），2026-11-09 实测单日 2,525 vs 3,237"
+    baseline: 20731
+    baseline_note: "35 天窗口去重；裸 COUNT(DISTINCT user_id) 为 16,280。若按日求和则为「播放人日」，量级远大于此，不可混用"
+
+  played_song_cnt:
+    name_cn: 播放曲目数
+    tier: atomic
+    formula: "COUNT(DISTINCT song_id)"
+    source: dws_song_play_daily
+    unit: count
+    availability: offline_only
+    additivity: semi
+    note: "当日**真正有播放**的曲目数（dws_song_play_daily 是歌×天粒度，一行一首歌）。要按曲风/歌手筛，JOIN dim_song ON s.song_id = p.song_id 再过滤，因为这张明细只有 song_id，没有 genre 列。"
+    trap: "「有多少首歌被播放过」问的是**当日有播放的曲目**，不是曲库总量。dim_song 里民谣共 240 首，2026-11-08 被播放过的只有 237 首——直接 COUNT(DISTINCT song_id) FROM dim_song WHERE genre='民谣' 得 240，会多算 3 首没被听过的。更隐蔽的错法：FROM dws_genre_daily g JOIN dim_song s ON s.genre = g.genre——汇总表（曲风×天）与维表用**维度属性**关联，等于把全部 240 首民谣歌都拉进来，结果还是 240；维表必须按主键 song_id 关联。"
+    baseline: 1486
+    baseline_note: "35 天窗口去重（曲库共 1486 首，几乎全部被播放过）；单日 2026-11-08 为 1474 首，其中民谣 237 首。按日求和是「曲目日」，不可与窗口去重混用"
+
+  play_end_cnt:
+    name_cn: 播放结束次数
+    tier: atomic
+    formula: "COUNT(*)"
+    source: dwd_play_end
+    unit: count
+    availability: offline_only
+    additivity: full
+    note: "含播完与中断，不含跳过"
+    baseline: 312083
+
+  complete_cnt:
+    name_cn: 完播次数
+    tier: atomic
+    formula: "COUNT(*)"
+    source: dwd_play_end
+    filter: "play_progress >= 0.9"
+    unit: count
+    availability: offline_only
+    additivity: full
+    baseline: 229038
+
+  skip_cnt:
+    name_cn: 跳过次数
+    tier: atomic
+    formula: "COUNT(*)"
+    source: dwd_skip
+    unit: count
+    availability: offline_only
+    additivity: full
+
+  play_duration_sum:
+    name_cn: 播放时长总和
+    tier: atomic
+    formula: "SUM(play_duration)"
+    source: dwd_play_end
+    unit: second
+    availability: offline_only
+    additivity: full
+
+  seek_cnt:
+    name_cn: 拖动次数
+    tier: atomic
+    formula: "COUNT(*)"
+    source: dwd_play_control
+    filter: "event_name = 'seek'"
+    unit: count
+    availability: offline_only
+    additivity: full
+
+  play_error_cnt:
+    name_cn: 播放失败次数
+    tier: atomic
+    formula: "COUNT(*)"
+    source: dwd_play_control
+    filter: "event_name = 'play_error'"
+    unit: count
+    availability: offline_only
+    additivity: full
+
+  collect_cnt:
+    name_cn: 收藏次数
+    tier: atomic
+    formula: "COUNT(*)"
+    source: dwd_interaction
+    filter: "event_name = 'collect' AND action = 'add'"
+    unit: count
+    availability: offline_only
+    additivity: full
+    trap: "漏掉 action='add' 会把取消收藏一起加进来，净收藏被低估"
+
+  like_cnt:
+    name_cn: 点赞次数
+    tier: atomic
+    formula: "COUNT(*)"
+    source: dwd_interaction
+    filter: "event_name = 'like' AND action = 'add'"
+    unit: count
+    availability: offline_only
+    additivity: full
+
+  share_cnt:
+    name_cn: 分享次数
+    tier: atomic
+    formula: "COUNT(*)"
+    source: dwd_interaction
+    filter: "event_name = 'share'"
+    unit: count
+    availability: offline_only
+    additivity: full
+
+  interact_cnt:
+    name_cn: 互动总次数
+    tier: atomic
+    formula: "COUNT(*)"
+    source: dwd_interaction
+    filter: "event_name IN ('collect','like','share','comment','download','follow_artist','playlist_add')"
+    unit: count
+    availability: offline_only
+    additivity: full
+    note: "7 类互动事件合计，完整清单见 docs/20 §3.1。2026-11-09 修正事件名：原写 'follow'，库里实际是 follow_artist（follow/unfollow 是 action 列的值，不是事件名），匹配不到会少 13,313 次"
+    baseline: 343572
+    trap: "口径分歧（已核对，非 bug）：本指标取**全部**互动事件，**包含** action='remove' 的取消收藏/点赞；而 docs/20 §3.1 主张排除 remove（那样是 254,298，互动率 0.5702 而非 0.7704）。DWS/ADS 的 dws_funnel_daily 实现是 COUNT(*) 无过滤，与 baseline 343,572 一致，所以语义层跟随实现。若要「正向互动率」需另立指标，不要改本指标的分母口径——那会让 ADS 已发布的 35 天数据与报表对不上"
+
+  search_cnt:
+    name_cn: 搜索次数
+    tier: atomic
+    formula: "COUNT(*)"
+    source: dwd_search
+    filter: "event_name = 'search'"
+    unit: count
+    availability: offline_only
+    additivity: full
+
+  search_click_cnt:
+    name_cn: 搜索点击次数
+    tier: atomic
+    formula: "COUNT(*)"
+    source: dwd_search
+    filter: "event_name = 'search_click'"
+    unit: count
+    availability: offline_only
+    additivity: full
+
+  search_zero_cnt:
+    name_cn: 零结果搜索数
+    tier: atomic
+    formula: "COUNT(*)"
+    source: dwd_search
+    filter: "event_name = 'search' AND result_cnt = 0"
+    unit: count
+    availability: offline_only
+    additivity: full
+    alias: [zero_result_pv]
+
+  order_cnt:
+    name_cn: 支付订单数
+    tier: atomic
+    formula: "COUNT(*)"
+    source: dwd_pay
+    filter: "event_name = 'order_pay'"
+    unit: count
+    availability: offline_only
+    additivity: full
+
+  revenue_sum:
+    name_cn: 收入金额（净）
+    tier: atomic
+    formula: "SUM(CASE WHEN event_name IN ('vip_subscribe', 'order_pay') THEN amount WHEN event_name = 'order_refund' THEN -amount ELSE 0 END)"
+    source: dwd_pay
+    filter: null
+    unit: cny
+    availability: offline_only
+    additivity: full
+    baseline: 823410
+    baseline_note: "= gross_revenue 870,335 − refund 46,925，与 ads_revenue.net_revenue 35 天合计逐分相等"
+    trap: "2026-11-09 修正：原定义只取 event_name='order_pay'，漏掉 vip_subscribe 的 713,349（占毛收入 82%），算出来 156,986，比真值低 5.24 倍。三个坑叠在一起：① 只取单一 event_name 会丢掉 VIP 订阅；② refund 与收入同表且 amount 为**正数**，必须手工取负；③ 「收入」按 glossary 是净额，不是流水（流水见 gross_revenue）"
+
+  revenue_sum_province:
+    name_cn: 各省收入金额（净）
+    tier: atomic
+    formula: "SUM(net_revenue)"
+    source: dev_province_revenue_daily
+    filter: null
+    unit: cny
+    availability: offline_only
+    additivity: full
+    baseline: 823410
+    baseline_note: "= dev_province_revenue_daily.net_revenue 35 天合计，与 revenue_sum 的 baseline 逐分相等（2026-11-11 实测）"
+    trap: "省×天粒度专用（source 是工程师开发表 dev_province_revenue_daily）；全国日粒度趋势继续用 revenue_sum（dws_revenue_daily / ads_revenue）。两表口径一致，不要跨表混合相加"
+
+  gross_revenue:
+    name_cn: 流水（毛收入）
+    tier: atomic
+    formula: "SUM(CASE WHEN event_name IN ('vip_subscribe', 'order_pay') THEN amount ELSE 0 END)"
+    source: dwd_pay
+    filter: null
+    unit: cny
+    availability: offline_only
+    additivity: full
+    baseline: 870335
+    baseline_note: "35 天 vip_subscribe 713,349 + order_pay 156,986；扣退款 46,925 后得 net 823,410"
+    trap: "「流水」口语常与「收入」混用，本库已拆成两个指标：gross_revenue 含退款前，revenue_sum 是净额。用户说流水取前者，说收入取后者"
+
+  pay_uv:
+    name_cn: 付费用户数
+    tier: atomic
+    formula: "COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id))"
+    source: dwd_pay
+    filter: "event_name IN ('vip_subscribe', 'order_pay')"
+    unit: count
+    availability: offline_only
+    additivity: semi
+    trap: "生成器里 is_login = uid%10<8，即 20% 用户是永久游客却仍会下单；用裸 COUNT(DISTINCT user_id) 会把这批人全压成 1 个空值（2026-11-09 实测 11-08：1,046 条支付里 207 条无 user_id）。另：ads_revenue.pay_user_cnt 含订阅类支付，口径比 dwd_pay 单事件宽，做趋势必须固定一个来源"
+    baseline: 12371
+    baseline_note: "**35 天窗口去重**（按本指标声明的 dwd_pay 口径）；裸 COUNT(DISTINCT user_id) 为 9,826。另有一个常被混淆的数：ads_revenue.pay_user_cnt 逐日之和为 **32,040**，那是「付费人日」，被用作 `arppu` 的分母（823,410/32,040=25.70），**不是 35 天付费用户数**"
+
+  refund_cnt:
+    name_cn: 退款订单数
+    tier: atomic
+    formula: "COUNT(*)"
+    source: dwd_pay
+    filter: "event_name = 'order_refund'"
+    unit: count
+    availability: offline_only
+    additivity: full
+
+  ad_impression_cnt:
+    name_cn: 广告曝光次数
+    tier: atomic
+    formula: "COUNT(*)"
+    source: dwd_ad
+    filter: "event_name = 'ad_impression'"
+    unit: count
+    availability: offline_only
+    additivity: full
+
+  ad_click_cnt:
+    name_cn: 广告点击次数
+    tier: atomic
+    formula: "COUNT(*)"
+    source: dwd_ad
+    filter: "event_name = 'ad_click'"
+    unit: count
+    availability: offline_only
+    additivity: full
+
+  pv:
+    name_cn: 页面浏览量
+    tier: atomic
+    formula: "COUNT(*)"
+    source: dwd_page_view
+    unit: count
+    availability: offline_only
+    additivity: full
+
+  # ======================================================= 二、派生指标 21
+  vip_user_ratio:
+    name_cn: VIP 用户占比
+    tier: derived
+    formula: "vip_user_cnt / dau"
+    source: dws_user_daily
+    unit: ratio
+    availability: offline_only
+    additivity: none
+    trap: "2026-11-14 补：分母必须是 **DAU（去重人数）**。写成 dwd_pay 里 is_vip='true' 的行数除以支付行数会算出 99/1,046=0.0946，那是「支付笔数中 VIP 占的比」，不是用户占比。另：dwd_pay 只有付费用户，拿它算全站 VIP 占比分母就只剩 1,046 个付费笔数，口径完全不同"
+    baseline: 0.0979
+    baseline_note: "2026-11-08：vip_user_cnt 317 / dau 3,237 = 0.0979（与 eval C19 的 expected 同源）"
+    cross_check: "dws_user_daily 的 dau 与本层 uv 指标同日同值（11-08 均为 3,237）"
+
+  ctr:
+    name_cn: 点击率
+    tier: derived
+    formula: "click_cnt / impression_cnt"
+    sources: [dwd_click, dwd_impression]
+    unit: ratio
+    ads: [ads_funnel, dws_funnel_daily]
+    availability: offline_only
+    additivity: none
+    trap: "ads_funnel.ctr 在 35 天里**恒为 0.2**（生成器设定），做趋势分析没有信息量，不要当业务结论"
+    baseline: 0.2
+
+  complete_rate:
+    name_cn: 完播率
+    tier: derived
+    formula: "complete_cnt / play_start_cnt"
+    sources: [dwd_play_end, dwd_play_start]
+    unit: ratio
+    ads: [ads_daily_overview, ads_song_ranking, ads_genre_dist, dws_funnel_daily]
+    availability: offline_only
+    additivity: none
+    trap: "分母必须是 play_start_cnt。用 play_end_cnt 当分母会算出 73.39%（229,038/312,083），那是「播完的人里有多少听完」，不是完播率"
+    baseline: 0.5136
+    baseline_note: "229,038 / 445,945；错误口径 229,038/312,083 = 0.7339"
+    cross_check: "AVG(ads_daily_overview.complete_rate) 也是 0.5136，本例两者恰好一致（日样本量均衡），但不能依赖这一点"
+
+  skip_rate:
+    name_cn: 跳过率
+    tier: derived
+    formula: "skip_cnt / play_start_cnt"
+    sources: [dwd_skip, dwd_play_start]
+    unit: ratio
+    availability: offline_only
+    additivity: none
+
+  seek_rate:
+    name_cn: 拖动率
+    tier: derived
+    formula: "seek_cnt / play_start_cnt"
+    sources: [dwd_play_control, dwd_play_start]
+    unit: ratio
+    availability: offline_only
+    additivity: none
+
+  play_error_rate:
+    name_cn: 播放失败率
+    tier: derived
+    formula: "play_error_cnt / play_start_cnt"
+    sources: [dwd_play_control, dwd_play_start]
+    unit: ratio
+    availability: offline_only
+    additivity: none
+
+  interact_rate:
+    name_cn: 互动率
+    tier: derived
+    formula: "interact_cnt / play_start_cnt"
+    sources: [dwd_interaction, dwd_play_start]
+    unit: ratio
+    availability: offline_only
+    additivity: none
+    baseline: 0.7704
+    baseline_note: "343,572 / 445,945"
+
+  collect_rate:
+    name_cn: 收藏率
+    tier: derived
+    formula: "collect_cnt / play_start_cnt"
+    sources: [dwd_interaction, dwd_play_start]
+    unit: ratio
+    availability: offline_only
+    additivity: none
+
+  like_rate:
+    name_cn: 点赞率
+    tier: derived
+    formula: "like_cnt / play_start_cnt"
+    sources: [dwd_interaction, dwd_play_start]
+    unit: ratio
+    availability: offline_only
+    additivity: none
+
+  share_rate:
+    name_cn: 分享率
+    tier: derived
+    formula: "share_cnt / play_start_cnt"
+    sources: [dwd_interaction, dwd_play_start]
+    unit: ratio
+    availability: offline_only
+    additivity: none
+
+  search_click_rate:
+    name_cn: 搜索点击率
+    tier: derived
+    formula: "search_click_cnt / search_cnt"
+    sources: [dwd_search]
+    unit: ratio
+    ads: [dws_search_daily]
+    availability: offline_only
+    additivity: none
+
+  search_zero_rate:
+    name_cn: 搜索零结果率
+    tier: derived
+    formula: "search_zero_cnt / search_cnt"
+    sources: [dwd_search]
+    unit: ratio
+    ads: [dws_search_daily]
+    availability: offline_only
+    additivity: none
+    alias: [zero_result_rate]
+
+  ad_ctr:
+    name_cn: 广告点击率
+    tier: derived
+    formula: "ad_click_cnt / ad_impression_cnt"
+    sources: [dwd_ad]
+    unit: ratio
+    ads: [ads_revenue, dws_revenue_daily]
+    availability: offline_only
+    additivity: none
+
+  pay_rate:
+    name_cn: 付费率
+    tier: derived
+    formula: "pay_uv / uv"
+    sources: [dwd_pay, dwd_session]
+    unit: ratio
+    availability: offline_only
+    additivity: none
+    trap: "分子是 **pay_uv**（去重付费用户）不是 order_cnt（订单数）。用订单数当分子，付费率会超过 100%"
+
+  refund_rate:
+    name_cn: 退款率
+    tier: derived
+    formula: "refund_cnt / order_cnt"
+    sources: [dwd_pay]
+    unit: ratio
+    ads: [ads_revenue, dws_revenue_daily]
+    availability: offline_only
+    additivity: none
+    baseline: 0.0474
+    baseline_note: "单量口径 1,012 / 21,338 = 0.04743，与 dws_revenue_daily.refund_rate 一致。**注意**：0.0539 是金额口径（46,925 / 870,335），曾被误填在这里；两个口径差 12%，问「退款率」必须先问是笔数还是金额"
+
+  arpu:
+    name_cn: 人均收入
+    tier: derived
+    formula: "revenue_sum / SUM(uv)"
+    sources: [dwd_pay, dwd_session]
+    unit: cny
+    availability: offline_only
+    additivity: none
+    trap: "三个坑叠在一起：①库里的 ads_revenue.arpu / dws_revenue_daily.arpu **不是本指标**，实为 ARPPU（净收入/付费用户数，日均 25.70）；②分母是**人日**（Σ 日 UV = 113,131），不是窗口去重 UV —— 写成 823,410/23,212 会得到 35.47，虚高 4.87 倍；③问「某个时间段的 ARPU」要说明是日均还是周期，两者不同口径"
+    baseline: 7.28
+    baseline_note: "823,410.00 / 113,131（分母为 35 天日活之和，即人日）；等价说法：日均净收入 ÷ 日均 DAU。分母改用 app_launch 口径后由 9.32 降到 7.28"
+
+  arppu:
+    name_cn: 付费人均收入
+    tier: derived
+    formula: "revenue_sum / SUM(pay_uv)"
+    sources: [dwd_pay]
+    unit: cny
+    availability: offline_only
+    additivity: none
+    note: "库里字段名叫 arpu 的那个，实际就是本指标。分母同样是**付费人日**（Σ 日付费用户 = 32,040），不是 35 天去重付费用户（12,371）"
+    baseline: 25.7
+    baseline_note: "823,410.00 / 32,040；与 ads_revenue.arpu 的 35 天均值 25.70 吻合，反证其口径为 ARPPU"
+
+  avg_session_duration:
+    name_cn: 人均会话时长
+    tier: derived
+    formula: "session_duration_sum / session_cnt"
+    sources: [dwd_session]
+    unit: second
+    availability: offline_only
+    additivity: none
+
+  avg_play_per_user:
+    name_cn: 人均起播次数
+    tier: derived
+    formula: "play_start_cnt / SUM(uv)"
+    sources: [dwd_play_start, dwd_session]
+    unit: count
+    ads: [ads_daily_overview, dws_user_daily]
+    availability: offline_only
+    additivity: none
+    note: "分母是**全量活跃的人日**（app_launch 口径 Σ 日 UV），不是播放用户，也不是窗口去重 UV。若换成 play_uv 会得到 5.05，那是「播放用户人均起播」；若换成 35 天去重 UV（23,212）会得到 19.21，那是「窗口内人均起播」。三者含义完全不同"
+    baseline: 3.94
+    baseline_note: "445,945 / 113,131（人日口径，即日均起播 ÷ 日均 DAU）；同为播放口径下 445,945 / 88,396 = 5.05"
+
+  avg_progress:
+    name_cn: 平均播放进度
+    tier: derived
+    formula: "AVG(play_progress)"
+    sources: [dwd_play_end]
+    unit: ratio
+    ads: [ads_daily_overview, ads_song_ranking, dws_song_play_daily]
+    availability: offline_only
+    additivity: none
+    trap: "只统计 dwd_play_end（播完或中断的那批），**不含 skip**。含义是「有结束事件的人平均听了多少」，不是「所有起播用户平均听了多少」。另：ADS 曾按歌曲等权（AVG(AVG())），2026-11-09 已改为按 play_end_cnt 加权，等权重算会高 0.5~0.6 个百分点"
+    baseline: 0.9328
+    baseline_note: "35 天加权（SUM(avg_progress*play_end_cnt)/SUM(play_end_cnt)）；同日等权为 0.9379~0.9390"
+
+  retention_d1:
+    name_cn: 次日留存
+    tier: derived
+    formula: "次日活跃 ∩ 当日新增 / 当日新增"
+    sources: [dwd_session, dim_user]
+    unit: ratio
+    ads: [ads_user_retention]
+    availability: offline_only
+    additivity: none
+    baseline: 0.5138
+    baseline_note: "D1 跨 34 个 cohort 的简单平均；D7 为 0.1305。注意首日 cohort(10-05) 是离群点 D1=0.8091（窗口起点长度偏倚，存量用户剩余寿命被高估），剔除后 D1=0.5049、D7=0.1163，加权(按 cohort 规模)为 0.5481 / 0.1824"
+
+  # ======================================================= 三、衍生指标 7
+  ctr_by_position:
+    name_cn: 分坑位点击率
+    tier: typed
+    formula: "ctr GROUP BY position"
+    sources: [dwd_impression, dwd_click]
+    base: ctr
+    dimension: position
+    availability: offline_only
+    additivity: none
+
+  complete_rate_by_genre:
+    name_cn: 分曲风完播率
+    tier: typed
+    formula: "complete_rate GROUP BY genre"
+    sources: [dwd_play_end, dwd_play_start, dim_song]
+    base: complete_rate
+    dimension: genre
+    ads: [ads_genre_dist, dws_genre_daily]
+    availability: offline_only
+    additivity: none
+
+  song_rank_daily:
+    name_cn: 歌曲日榜
+    tier: typed
+    formula: "RANK() OVER (PARTITION BY dt ORDER BY complete_rate DESC)"
+    sources: [dwd_play_start, dim_song]
+    base: complete_rate
+    dimension: song_id
+    ads: [ads_song_ranking]
+    availability: offline_only
+    additivity: none
+    trap: "排序键是**完播率**不是播放量；每天取 Top20，全窗口 700 行"
+
+  revenue_7d:
+    name_cn: 近 7 日收入
+    tier: typed
+    formula: "SUM(net_revenue) OVER (ORDER BY dt ROWS BETWEEN 6 PRECEDING AND CURRENT ROW)"
+    sources: [dws_revenue_daily]
+    base: revenue_sum
+    dimension: dt
+    availability: offline_only
+    additivity: none
+    trap: "窗口函数需要 7 天垫底，前 6 天结果不完整，不能当零收入"
+
+  retention_d1_by_cohort:
+    name_cn: 分同期群次日留存
+    tier: typed
+    formula: "retention_rate WHERE day_n = 1 GROUP BY cohort_date"
+    sources: [ads_user_retention]
+    base: retention_d1
+    dimension: cohort_date
+    ads: [ads_user_retention]
+    availability: offline_only
+    additivity: none
+
+  ad_ecpm:
+    name_cn: 广告千次曝光收入
+    tier: typed
+    formula: "ad_revenue / ad_impression_cnt * 1000"
+    sources: [dws_revenue_daily]
+    base: ad_ctr
+    availability: offline_only
+    additivity: none
+    trap: "ad_revenue 是按「点击 × 出价」估算的，不是真实竞价，ecpm 只能当量级参考"
+
+  funnel_rate:
+    name_cn: 漏斗各层转化率
+    tier: typed
+    formula: "click_cnt/impression_cnt ; play_start_cnt/click_cnt ; complete_cnt/play_start_cnt ; interact_cnt/play_start_cnt ; pay_cnt/impression_cnt"
+    sources: [dws_funnel_daily, ads_funnel]
+    base: ctr
+    ads: [ads_funnel, dws_funnel_daily]
+    availability: offline_only
+    additivity: none
+    note: "每层分母是上一层分子；但 pay_conv_rate 例外，分母是**曝光**，见下方 trap"
+    trap: "docs/20 §5.1 定义五层漏斗且付费转化分母为 complete_cnt；实现是六层、分母为 impression_cnt。**以实现为准**，两者相差一个数量级（1.6% vs 15.5%）"
+    baseline:
+      ctr: 0.2
+      click_to_play_rate: 1.0
+      complete_rate: 0.5136
+      interact_rate: 0.7704
+      pay_conv_rate: 0.01595
+    baseline_note: "35 天窗口，分子分母各自求和；click_to_play 恒为 1.0 属退化"
+
+# =============================================================================
+# caliber_guard —— 口径机检规则（2026-11-11 新增）
+#
+# 与 R1~R24 的分工：那些规则管「这条 SQL 会不会跑错 / 越权 / 编造表」，
+# 本段管「跑出来的数是不是那个指标」。语法对、EXPLAIN 过、口径错，是真实事故：
+# 2026-11-09 首版收入 CTAS 只取 order_pay，漏掉 vip_subscribe 的 713,349
+# （占毛收入 82%），算出来 156,986，比真值 823,410 低 5.24 倍——静态五检全绿，
+# 靠人工复核才拦下。本段就是把那次复核固化成机器规则。
+#
+# 落地路径（一份定义、一份实现）：
+#   metrics.yaml → gen_tables.py 合并进 tables.json.caliber_guard
+#   → agent/guards/guard.py 的 R25（问数链路）
+#   → code/agent/etlguard.py 的 caliber_ok（ETL 生成链路）
+#   检查实现只有一份：agent/guards/caliber.py
+#
+# kind 语义：
+#   event_coverage  金额求和必须覆盖指定事件集合（漏一个就是口径缺失）
+#   refund_sign     退款金额本身为正，按正数相加等于把退款当收入
+#   source_guard    去重实体计数用错了事件流（播放口径 vs 启动口径差 22%）
+#   denominator     比率的分母必须来自声明的事实表，不能是本表行数（2026-11-14 新增）
+#   dedup_entity    用户占比的分母必须是去重人数，不能是支付笔数（2026-11-14 新增）
+#
+# level 分级（2026-11-14 改）：C1~C3 仍是 WARN —— 口径偏离有时是有意选择
+# （只看普通支付订单也是一种问法），机器给黄牌 + 依据，由人决定。
+# C4/C5 用 REJECT：分母用错事件流、把笔数当人数**不存在「有意这样算」的解释**，
+# 是确定性错误。判据是「能不能说出这样算的业务含义」，能说出的用 WARN。
+# C4 带 fix_template，机械替换分母即可改对（不花 token）；C5 分子分母都错，
+# 走 op=rewrite 让模型按 hint 整句重写。
+# =============================================================================
+caliber_guard:
+
+  - id: C1
+    kind: event_coverage
+    level: WARN
+    rule: "R25-口径-收入事件"
+    table: dwd_pay
+    agg_column: amount
+    require_events: [vip_subscribe, order_pay]
+    title: 收入金额必须覆盖 VIP 订阅
+    why: "35 天里 VIP 订阅 713,349、普通支付 156,986；只取 order_pay 会算出 156,986，比真值 823,410 低 5.24 倍"
+    hint: "改为 SUM(CASE WHEN event_name IN ('vip_subscribe','order_pay') THEN amount ELSE 0 END)；净收入再按 C2 减退款"
+    replacement: "SUM(CASE WHEN event_name IN ('vip_subscribe','order_pay') THEN amount ELSE 0 END)"
+
+  - id: C2
+    kind: refund_sign
+    level: WARN
+    rule: "R25-口径-退款符号"
+    table: dwd_pay
+    agg_column: amount
+    refund_event: order_refund
+    title: 退款必须取负或显式排除
+    why: "退款与收入同表且 amount 是正数；按正数相加等于把退款当收入，35 天退款 46,925（占毛收入 5.4%）"
+    hint: "净额：WHEN event_name = 'order_refund' THEN -amount；流水：显式只保留 vip_subscribe / order_pay"
+    replacement: "SUM(CASE WHEN event_name IN ('vip_subscribe','order_pay') THEN amount WHEN event_name = 'order_refund' THEN -amount ELSE 0 END)"
+
+  - id: C3
+    kind: source_guard
+    level: WARN
+    rule: "R25-口径-UV 源表"
+    table: dwd_play_start
+    right_table: dwd_session
+    agg_columns: [user_id, device_id]
+    title: 活跃用户必须用启动口径
+    why: "2026-11-09 实测 11-08 启动口径 3,237 人、播放口径 2,525 人，差 22%，差额是启动了但没播的人"
+    hint: "改用 dwd_session（event_name = 'app_launch'）；只算播放用户请另立 play_uv 指标，不要顶替 DAU"
+    replacement: "dwd_session"
+
+  - id: C4
+    kind: denominator
+    level: REJECT
+    rule: "R25-口径-完播率分母"
+    table: dwd_play_end
+    right_table: dwd_play_start
+    indicator: complete_rate
+    right_denominator: play_start_cnt
+    title: 完播率分母必须是起播数
+    why: "分母用 dwd_play_end 的 COUNT(*)（312,083 行）会算出 0.7341；真值 complete_cnt/play_start_cnt = 229,038/445,945 = 0.5143。promptlib 两条硬提示仍挡不住（2026-11-14 实测 5 次错 1 次）"
+    hint: "分子分母各自在自己的来源表上独立聚合成标量子查询再相除：分子是 dwd_play_end 里 play_progress>=0.9 的行数，分母是 dwd_play_start 的起播数"
+    fix_template: "(SELECT COUNT(*) FROM dwd_play_start WHERE dt = '{dt}')"
+
+  - id: C5
+    kind: dedup_entity
+    level: REJECT
+    rule: "R25-口径-用户占比分母"
+    table: dwd_pay
+    right_table: dws_user_daily
+    indicator: ratio
+    title: 用户占比分母必须是去重人数
+    why: "dwd_pay 一行是一笔支付；SUM(is_vip='true')/COUNT(*) = 99/1,046 = 0.0946 是笔数占比，真值 vip_user_cnt/dau = 317/3,237 = 0.0979（2026-11-08）"
+    hint: "改用 dws_user_daily 的 vip_user_cnt / dau（语义层已有 vip_user_ratio 指标），不要从支付明细按行计数"
+    replacement: "SELECT vip_user_cnt / NULLIF(dau, 0) AS vip_ratio FROM dws_user_daily WHERE dt = '<当日>'"
+
+  - id: C6
+    kind: ratio_consistency
+    level: REJECT
+    rule: "R25-口径-占比分子分母同源"
+    table: ads_province_dist
+    tables: [ads_province_dist, dws_province_daily]
+    indicator: ratio
+    title: 省份占比的分子分母必须同列同源
+    why: "2026-11-15 实测 C15：MAX(province_play)/SUM(play_start_cnt) 分子取自按省聚合子查询、分母另起 CROSS JOIN 取另一层的列，算出 0.0029；真值 MAX(province_play)/SUM(province_play) = 1150/12710 = 0.0905"
+    hint: "占比的分子与分母用同一列：按省聚合后 MAX(province_play)/SUM(province_play)，或直接在省份表上 MAX(play_start_cnt)/SUM(play_start_cnt)；不要让分子分母各自来自不同的子查询层"
+    replacement: "SELECT MAX(province_play) / NULLIF(SUM(province_play), 0) AS ratio FROM (SELECT province, SUM(play_start_cnt) AS province_play FROM dws_province_daily WHERE dt = '<当日>' GROUP BY province) t"

@@ -1,0 +1,251 @@
+{
+ "version": 1,
+ "built_at": "2026-11-12T15:15:09+08:00",
+ "source": "qa_logs",
+ "scanned": 607,
+ "qa_total": 3786,
+ "cases": [
+  {
+   "rule": "R16-游客实体",
+   "wrong": "COUNT(DISTINCT user_id)",
+   "right": "COUNT(DISTINCT COALESCE(NULLIF(user_id,''), device_id))",
+   "hint": "改成 COUNT(DISTINCT COALESCE(NULLIF(user_id,''), device_id))；若",
+   "message": "COUNT(DISTINCT user_id) 会把全体游客压成 1 个：COUNT(DISTINCT user_id)",
+   "samples": [
+    "2026-11-08 的 DAU 比 11-07 多了多少",
+    "11-08 有多少人听了歌",
+    "昨天一共有多少人退款了"
+   ],
+   "hits": 90,
+   "fixed": 90
+  },
+  {
+   "rule": "R18-JOIN 扇出",
+   "wrong": "WHERE",
+   "right": "dim_user.is_current = 'Y'",
+   "hint": "加 dim_user.is_current = 'Y'（或 dt BETWEEN start_date AND end_",
+   "message": "JOIN dim_user 未收敛到单版本，聚合结果会按历史版本数放大（实测 11-08：dwd_session JOIN dim_user 得 3,171 行",
+   "samples": [
+    "x",
+    "分省用户数（未收敛 SCD2）"
+   ],
+   "hits": 56,
+   "fixed": 0
+  },
+  {
+   "rule": "R17-跨 catalog",
+   "wrong": "internal.music_dw.dwd_play_start",
+   "right": "dwd_play_start",
+   "hint": "去掉 catalog 前缀用裸表名，连接初始化时已 SWITCH hive_catalog + USE music_dw",
+   "message": "internal.music_dw.dwd_play_start 指向 internal 实时库：同名表口径不同（dwd_play_start 实时 72,35",
+   "samples": [
+    "x",
+    "跨 catalog 查询"
+   ],
+   "hits": 56,
+   "fixed": 0
+  },
+  {
+   "rule": "R5-明细限流",
+   "wrong": "",
+   "right": "明细查询必须 LIMIT ≤ 1000",
+   "hint": "明细查询必须 LIMIT ≤ 1000",
+   "message": "查询了明细表 dwd_session 但没有 LIMIT",
+   "samples": [
+    "删除数据",
+    "x"
+   ],
+   "hits": 55,
+   "fixed": 0
+  },
+  {
+   "rule": "R3-表白名单",
+   "wrong": "从 dwd_user_login 查（该表不在白名单）",
+   "right": "可用表见 tables.json；不要访问系统库",
+   "hint": "可用表见 tables.json；不要访问系统库",
+   "message": "表 `ranked` 不在元数据白名单内（共 32 张）",
+   "samples": [
+    "每个省份每天消费金额最高的20个用户里，广东省11月8日有哪些人",
+    "帮我画最近7天每个省的销售额表格",
+    "前天有多少埋点数据进来"
+   ],
+   "hits": 37,
+   "fixed": 28
+  },
+  {
+   "rule": "R9-禁 SELECT *",
+   "wrong": "SELECT *",
+   "right": "SELECT dt, <需要的列>",
+   "hint": "显式列出字段，减少无效传输",
+   "message": "非 ADS 表禁止 SELECT *",
+   "samples": [
+    "11-08 有哪些用户启动了 App",
+    "x",
+    "查一下元数据"
+   ],
+   "hits": 32,
+   "fixed": 14
+  },
+  {
+   "rule": "R20-存量不可加",
+   "wrong": "SUM(vip_user_cnt)",
+   "right": "MAX_BY(vip_user_cnt, dt) 或按 dt 逐日展示",
+   "hint": "取窗口末日的值；若确要人日，请在答案里标注『人日』",
+   "message": "SUM(vip_user_cnt) 把存量快照跨日相加，得到的是『人日』不是『用户数』",
+   "samples": [
+    "11-08 的 VIP 用户占比是多少"
+   ],
+   "hits": 15,
+   "fixed": 15
+  },
+  {
+   "rule": "COMPARE-BASE",
+   "wrong": "<日期>",
+   "right": "当前窗口（<日期>）",
+   "hint": "删掉 SQL 里的基线日期与第二条子查询，只保留当前窗口的聚合",
+   "message": "这是对比问题，但 SQL 里出现了基线日期 2026-11-07。基线与差值由系统另行复算：SQL 只查当前窗口（2026-11-08）一个值即可。",
+   "samples": [
+    "11-08 的播放量比 11-07 少了多少"
+   ],
+   "hits": 8,
+   "fixed": 8
+  },
+  {
+   "rule": "R4-字段存在性",
+   "wrong": "",
+   "right": "最常见的原因是模型幻觉；请先 describe 目标表",
+   "hint": "最常见的原因是模型幻觉；请先 describe 目标表",
+   "message": "字段 `pay_amt` 在 31 张表的任何列里都不存在",
+   "samples": [
+    "帮我画最近7天每个省的销售额表格",
+    "手机号 [PHONE] 的用户 2026-11-08 听了多少首歌"
+   ],
+   "hits": 2,
+   "fixed": 0
+  }
+ ],
+ "links": [
+  {
+   "q": "2026-11-08 的 DAU 比 11-07 多了多少",
+   "tables": [
+    "dwd_session"
+   ]
+  },
+  {
+   "q": "11-08 有哪些用户启动了 App",
+   "tables": [
+    "dwd_session"
+   ]
+  },
+  {
+   "q": "11-08 有多少人听了歌",
+   "tables": [
+    "dwd_play_start"
+   ]
+  },
+  {
+   "q": "11-08 的 VIP 用户占比是多少",
+   "tables": [
+    "dws_user_daily"
+   ]
+  },
+  {
+   "q": "11-08 的播放量比 11-07 少了多少",
+   "tables": [
+    "dwd_play_start"
+   ]
+  },
+  {
+   "q": "昨天一共有多少人退款了",
+   "tables": [
+    "dwd_pay"
+   ]
+  },
+  {
+   "q": "11-08 ARPU",
+   "tables": [
+    "dwd_pay",
+    "dwd_session"
+   ]
+  },
+  {
+   "q": "2026-11-08 ods_music_event 有多少条记录",
+   "tables": [
+    "ods_music_event"
+   ]
+  },
+  {
+   "q": "2026-11-08 的播放量",
+   "tables": [
+    "dwd_play_start"
+   ]
+  },
+  {
+   "q": "2026-11-08 播放量排行榜",
+   "tables": [
+    "ads_genre_dist"
+   ]
+  },
+  {
+   "q": "2026-11-08 付费用户占比是多少",
+   "tables": [
+    "dwd_pay",
+    "dwd_session"
+   ]
+  },
+  {
+   "q": "（调试）同样的列，分析师可以跑",
+   "tables": [
+    "dwd_session"
+   ]
+  },
+  {
+   "q": "帮我查一下播放量",
+   "tables": [
+    "dwd_play_start"
+   ]
+  },
+  {
+   "q": "(调试)",
+   "tables": [
+    "dws_user_daily"
+   ]
+  },
+  {
+   "q": "昨天消费金额是多少",
+   "tables": [
+    "dwd_pay"
+   ]
+  },
+  {
+   "q": "昨天消费最多的用户是谁",
+   "tables": [
+    "dwd_pay"
+   ]
+  },
+  {
+   "q": "11-08 按曲风统计播放量",
+   "tables": [
+    "dws_genre_daily"
+   ]
+  },
+  {
+   "q": "上个月的播放量",
+   "tables": [
+    "dwd_play_start"
+   ]
+  },
+  {
+   "q": "上周的播放量",
+   "tables": [
+    "dwd_play_start"
+   ]
+  },
+  {
+   "q": "最近7天的播放量",
+   "tables": [
+    "dwd_play_start"
+   ]
+  }
+ ]
+}

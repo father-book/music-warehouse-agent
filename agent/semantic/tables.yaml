@@ -1,0 +1,620 @@
+# =============================================================================
+# tables.yaml —— 数仓表语义层（31 张表）
+#
+# 定位：**业务语义**，不是字段清单。
+#   · 字段名/类型/顺序的权威来源是 agent/tables.json（由 DDL 自动解析生成），
+#     本文件不重复抄字段，避免两处漂移。
+#   · 本文件负责 Agent 无法从 DDL 得到的信息：
+#     粒度（grain）、主键（pk）、行数（rows）、口径陷阱（caveats）。
+#
+# rows / dt_range / verified_at 均由 2026-11-09 重造后实测填入，
+# 不是估算值。重跑全链路后必须同步更新，否则 Agent 的合理性自检会失准。
+# =============================================================================
+version: 1
+verified_at: "2026-11-09"
+verified_by: "500 万重造 + dag_t1.sh 全链路重跑（35 天）"
+
+db:
+  hive: music_dw
+  hive_dev: music_dev
+  doris: music_offline
+  doris_dev: music_dev_offline
+  # Agent 可写的只有 *_dev；正式库仅允许 SELECT（护栏 R11）
+  writable: [music_dev, music_dev_offline]
+
+global:
+  timezone: Asia/Shanghai
+  # 重造覆盖窗口，35 天。所有基线口径都按这个窗口计算
+  dt_range: ["2026-10-05", "2026-11-08"]
+  days: 35
+  partition_col: dt
+  partition_format: "yyyy-MM-dd"
+  storage: ORC + SNAPPY
+  # Hive 外部表，LOCATION 见各表 path；dev 表 LOCATION 全部改到 /warehouse/music_dev/
+
+# =============================================================================
+# JOIN 关系（2026-11-09 新增）—— 护栏 R18 / R19 的唯一判断依据
+#
+# 为什么必须有这一段：
+#   R7 只检查「JOIN 有没有 ON」，不判基数。于是 `dwd_session JOIN dim_user`
+#   这种写法完全合规，而 dim_user 是拉链表（1,150,000 行 / 1,000,000 用户），
+#   实测 11-08 会从 2,660 行膨胀到 3,171 行（+19.2%），零报错。
+#   有了 cardinality，R18 才能对**任意表**生效，而不是给 dim_user 写死特例。
+#
+# 记法：
+#   cardinality: N:1  多行事实对一行维表，JOIN 后行数不变（安全）
+#   cardinality: 1:N  一行对多行，JOIN 后行数膨胀（R18 拦截）
+#   join_on 里的 <from> 由 from 列表逐项代入（键名不用 on：YAML 1.1 会把裸 on 解析成布尔真）
+#   converge: 目标表 pk 不唯一时必须加的收敛条件；缺了就是扇出
+#
+# 未在此声明的关系，一律视为「未批准」——R18 会把它的 JOIN 判为不可验证。
+# dt -> dim_date 不在此列：dt 同时是分区键，按日期补维表不会膨胀。
+# =============================================================================
+relationships:
+  - name: fact_to_song
+    from: [dwd_play_start, dwd_play_end, dwd_skip, dwd_impression, dwd_click,
+           dwd_play_control, dwd_interaction, dws_song_play_daily, ads_song_ranking]
+    to: dim_song
+    join_on: "<from>.song_id = dim_song.song_id"
+    cardinality: N:1
+    converge: null
+
+  - name: fact_to_user
+    from: [dwd_play_start, dwd_play_end, dwd_skip, dwd_impression, dwd_click,
+           dwd_play_control, dwd_interaction, dwd_search, dwd_ad, dwd_page_view,
+           dwd_session, dwd_pay, ods_music_event, ods_user_change]
+    to: dim_user
+    join_on: "<from>.user_id = dim_user.user_id"
+    cardinality: N:1
+    converge: "dim_user.is_current = 'Y'"
+    # dim_user.pk 在物理上不唯一，所以"不加 converge"时这条边实际是 1:N
+    fanout_if_missing: true
+
+tables:
+
+  # ---------------------------------------------------------------- ODS
+  ods_music_event:
+    layer: ods
+    name_cn: 埋点原始事件
+    grain: 一条埋点事件
+    pk: event_id
+    pk_unique: true
+    versions: none
+    partition: [dt]
+    rows: 4994396
+    path: /warehouse/music_dw/ods_music_event
+    catalog: hive_catalog
+    database: music_dw
+    caveats:
+      - "event_time / server_time 是**毫秒字符串**，必须 CAST 后外套 from_utc_timestamp(...,'Asia/Shanghai')，否则整体早 8 小时（docs/25）"
+      - "properties 是 JSON 原文，每次查询都要 get_json_object，不要在 ODS 层直接做指标"
+      - "province 是**事件级**字段，同一用户一天内可能出现在多个省，见 glossary.traps.province_dup"
+
+  ods_user_change:
+    layer: ods
+    name_cn: 用户属性快照
+    grain: 一个用户一条属性记录
+    pk: user_id
+    pk_unique: false
+    versions: changelog           # 变更流水：同一个 user_id 有多条变更记录
+    partition: []
+    rows: 1150000
+    path: /warehouse/music_dw/ods_user_change
+    catalog: hive_catalog
+    database: music_dw
+    caveats:
+      - "无 dt 分区，是全量快照，不能按天增量取"
+
+  # ---------------------------------------------------------------- DIM
+  dim_date:
+    layer: dim
+    name_cn: 日期维度
+    grain: 一天一行
+    pk: dt
+    pk_unique: true
+    versions: none
+    partition: [dt]
+    rows: 35
+    path: /warehouse/music_dw/dim_date
+    catalog: hive_catalog
+    database: music_dw
+    caveats:
+      - "行数只有 35，只覆盖重造窗口；跨窗口分析要按需生成，不能假设日历完整"
+
+  dim_song:
+    layer: dim
+    name_cn: 歌曲维度
+    grain: 一首歌一行
+    pk: song_id
+    pk_unique: true
+    versions: none
+    partition: []
+    rows: 1486
+    path: /warehouse/music_dw/dim_song
+    catalog: hive_catalog
+    database: music_dw
+    caveats:
+      - "song_id 存在**两套编码**（数字 ID 与 MusicBrainz MBID），JOIN 必须兼容两套，否则曲风/榜单 100% 落空（docs/24、护栏 R14）"
+      - "曲风只有 4 类：流行 856 / 摇滚 330 / 民谣 240 / R&B 60"
+
+  dim_user:
+    layer: dim
+    name_cn: 用户维度
+    grain: 一个用户的一个历史版本一行（SCD2 拉链表，不是一人一行）
+    pk: user_id
+    pk_unique: false
+    versions: scd2           # 拉链表：同一个 user_id 有多个历史版本
+    partition: []
+    rows: 1150000
+    path: /warehouse/music_dw/dim_user
+    catalog: hive_catalog
+    database: music_dw
+    caveats:
+      - "**JOIN 必须收敛**：`is_current='Y'` 或 `dt BETWEEN start_date AND end_date`，否则行数膨胀。实测 11-08 `dwd_session JOIN dim_user` 不加收敛得 3,171 行、加了得 2,660 行，虚高 19.2% 且零报错（护栏 R18）"
+      - "province 只有 **28** 个取值，而事件表 province 有 **31** 个；按维表关联与按事件字段分组，省份数不同，不要混用"
+      - "有 115 万用户，但全窗口活跃用户只有 7.1 万（日均 2,031），维表远大于事实表是正常现象"
+
+  # ---------------------------------------------------------------- DWD
+  dwd_play_start:
+    layer: dwd
+    name_cn: 播放起播明细
+    grain: 一次起播
+    pk: event_id
+    pk_unique: true
+    versions: none
+    partition: [dt]
+    rows: 445945
+    path: /warehouse/music_dw/dwd_play_start
+    catalog: hive_catalog
+    database: music_dw
+    caveats:
+      - "是**起播**不是播放会话，同一会话可多次起播"
+      - "完播率的分母只能用本表，不能用 dwd_play_end（会抬到 73%）"
+
+  dwd_play_end:
+    layer: dwd
+    name_cn: 播放结束明细
+    grain: 一次播放结束（播完或中断）
+    pk: event_id
+    pk_unique: true
+    versions: none
+    partition: [dt]
+    rows: 312083
+    path: /warehouse/music_dw/dwd_play_end
+    catalog: hive_catalog
+    database: music_dw
+    caveats:
+      - "**不含跳过**（skip 事件不产生 play_end），所以 end < start 是正常的"
+      - "play_progress >= 0.9 才算完播；avg_progress 的含义是「播完的那批人平均听了多少」"
+
+  dwd_skip:
+    layer: dwd
+    name_cn: 跳过明细
+    grain: 一次跳过
+    pk: event_id
+    pk_unique: true
+    versions: none
+    partition: [dt]
+    rows: 133862
+    path: /warehouse/music_dw/dwd_skip
+    catalog: hive_catalog
+    database: music_dw
+    caveats:
+      - "跳过事件没有 play_progress，不能与 play_end 混在一起算平均进度"
+
+  dwd_session:
+    layer: dwd
+    name_cn: 会话与启动退出事件
+    grain: 一条会话内事件（app_launch / app_exit 等）
+    pk: event_id
+    pk_unique: true
+    versions: none
+    partition: [dt]
+    rows: 203639
+    path: /warehouse/music_dw/dwd_session
+    catalog: hive_catalog
+    database: music_dw
+    caveats:
+      - "行数 203,639 ≠ 会话数；COUNT(DISTINCT session_id) 才是 114,450"
+      - "2026-11-09 起 dws_user_daily.session_cnt 与本表同源（app_launch 全量），可直接交叉校验"
+
+  dwd_impression:
+    layer: dwd
+    name_cn: 曝光明细
+    grain: 一次曝光
+    pk: event_id
+    pk_unique: true
+    versions: none
+    partition: [dt]
+    rows: 2229725
+    path: /warehouse/music_dw/dwd_impression
+    catalog: hive_catalog
+    database: music_dw
+    caveats:
+      - "ctr 的分母来源；曝光量是明细层最大的表（223 万行，占全量 45%）"
+
+  dwd_click:
+    layer: dwd
+    name_cn: 点击明细
+    grain: 一次点击
+    pk: event_id
+    pk_unique: true
+    versions: none
+    partition: [dt]
+    rows: 445945
+    path: /warehouse/music_dw/dwd_click
+    catalog: hive_catalog
+    database: music_dw
+    caveats:
+      - "点击量与起播量完全相等（445,945），因为生成器让每次点击必然跟一次起播 → click_to_play_rate 恒为 1.0，无区分度"
+
+  dwd_play_control:
+    layer: dwd
+    name_cn: 播放控制明细
+    grain: 一次控制事件（seek / play_error / pause / resume）
+    pk: event_id
+    pk_unique: true
+    versions: none
+    partition: [dt]
+    rows: 223940
+    path: /warehouse/music_dw/dwd_play_control
+    catalog: hive_catalog
+    database: music_dw
+    caveats:
+      - "一张表混了多种 event_name，取 seek_cnt / play_error_cnt 必须带 event_name 过滤"
+
+  dwd_interaction:
+    layer: dwd
+    name_cn: 互动明细
+    grain: 一次互动事件
+    pk: event_id
+    pk_unique: true
+    versions: none
+    partition: [dt]
+    rows: 343572
+    path: /warehouse/music_dw/dwd_interaction
+    catalog: hive_catalog
+    database: music_dw
+    caveats:
+      - "collect / like 区分 action='add' / 'cancel'，算收藏数必须带 action='add'，否则加减抵消"
+
+  dwd_search:
+    layer: dwd
+    name_cn: 搜索明细
+    grain: 一次搜索或搜索点击
+    pk: event_id
+    pk_unique: true
+    versions: none
+    partition: [dt]
+    rows: 75944
+    path: /warehouse/music_dw/dwd_search
+    catalog: hive_catalog
+    database: music_dw
+    caveats:
+      - "search 与 search_click 是两种 event_name，同表混存"
+
+  dwd_ad:
+    layer: dwd
+    name_cn: 广告明细
+    grain: 一次广告曝光或点击
+    pk: event_id
+    pk_unique: true
+    versions: none
+    partition: [dt]
+    rows: 275596
+    path: /warehouse/music_dw/dwd_ad
+    catalog: hive_catalog
+    database: music_dw
+    caveats:
+      - "广告收入是按「点击 × 出价」**估算**的，不是真实竞价结果，不能做真实归因"
+
+  dwd_pay:
+    layer: dwd
+    name_cn: 支付与退款明细
+    grain: 一笔订单事件（支付或退款）
+    pk: event_id
+    pk_unique: true
+    versions: none
+    partition: [dt]
+    rows: 36578
+    path: /warehouse/music_dw/dwd_pay
+    catalog: hive_catalog
+    database: music_dw
+    caveats:
+      - "order_pay 与 order_refund 同表混存：算收入必须显式区分事件——净收入 = vip_subscribe + order_pay 减退款（订单/退款都别忘了，只取 order_pay 会漏掉占 82% 的 VIP 订阅，2026-11-09 实测低 5.24 倍）"
+      - "amount 是 DECIMAL(18,2)，不要转 DOUBLE 求和"
+
+  dwd_page_view:
+    layer: dwd
+    name_cn: 页面浏览明细
+    grain: 一次页面浏览
+    pk: event_id
+    pk_unique: true
+    versions: none
+    partition: [dt]
+    rows: 267567
+    path: /warehouse/music_dw/dwd_page_view
+    catalog: hive_catalog
+    database: music_dw
+    caveats: []
+
+  # ---------------------------------------------------------------- DWS
+  dws_song_play_daily:
+    layer: dws
+    name_cn: 歌曲日粒度播放汇总
+    grain: 歌 × 天
+    pk: [dt, song_id]
+    pk_unique: true
+    versions: none
+    partition: [dt]
+    rows: 51540
+    path: /warehouse/music_dw/dws_song_play_daily
+    catalog: hive_catalog
+    database: music_dw
+    caveats:
+      - "complete_rate 已是日粒度比率，跨天聚合必须 SUM(complete_cnt)/SUM(play_start_cnt)，不能 AVG"
+
+  dws_user_daily:
+    layer: dws
+    name_cn: 用户日粒度活跃汇总
+    grain: 天（全站一行）
+    pk: [dt]
+    pk_unique: true
+    versions: none
+    partition: [dt]
+    rows: 35
+    path: /warehouse/music_dw/dws_user_daily
+    catalog: hive_catalog
+    database: music_dw
+    caveats:
+      - "2026-11-09 起 dau/session_cnt 与 dwd_session(app_launch) 同源（全量活跃 + 全量会话）；play_start_cnt 仍来自 dwd_play_start，所以 avg_play_per_user = 起播次数 / 全量活跃用户数"
+      - "login_user_cnt / vip_user_cnt 只对登录用户去重（游客无从判断），两者天然 ≤ dau"
+      - "**dau 是「当天去重人数」，跨天不可相加当 UV**：35 天 SUM(dau) = 113,131 是**人日**，窗口去重 UV 只有 23,212，差 4.87 倍。问「这段时间多少用户」必须回明细重算去重，不能 SUM"
+      - "旧版（11-09 之前）dau 取自 dwd_play_start，只覆盖「播过歌的人」，比真实活跃低 22%（11-08：2,525 vs 3,237）；看到 2,4xx~2,5xx 的日活跃数说明读到的是旧分区"
+
+  dws_genre_daily:
+    layer: dws
+    name_cn: 曲风日粒度汇总
+    grain: 曲风 × 天
+    pk: [dt, genre]
+    pk_unique: true
+    versions: none
+    partition: [dt]
+    rows: 140
+    path: /warehouse/music_dw/dws_genre_daily
+    catalog: hive_catalog
+    database: music_dw
+    caveats:
+      - "140 = 4 曲风 × 35 天，曲风维度只有 4 类，不要期待长尾"
+      - "本表**没有 song_id**，只有曲风级聚合。要数「多少首歌」必须换 dws_song_play_daily（歌×天）再 JOIN dim_song ON song_id"
+    # 2026-11-15 C18：粒度不匹配的表靠「表名含 genre/play_start_cnt」是吸不住的。
+    # 问题是「多少首歌被播放过」，而本表粒度是曲风×天——它物理上无法回答「几首歌」，
+    # 模型却会拿它按 genre 关联 dim_song（汇总表 × 维表用维度属性关联），
+    # 得 240（全曲库民谣）而非 237（当日被播放过的）。5 次里错 4 次，错法完全一致。
+    not_for: ["多少首歌", "首歌被播放", "曲目数", "被播放过的歌"]
+
+  dws_province_daily:
+    layer: dws
+    name_cn: 省份城市日粒度汇总
+    grain: 省 × 市 × 天
+    pk: [dt, province, city]
+    pk_unique: true
+    versions: none
+    partition: [dt]
+    rows: 2728
+    path: /warehouse/music_dw/dws_province_daily
+    catalog: hive_catalog
+    database: music_dw
+    caveats:
+      - "2728 ≈ 78 组合/天；city 无空值，每条都是「某省某市」"
+      - "**分省 dau 之和 = 全站 dau**（2026-11-09 实测 113,131 = 113,131）。这是硬判据：不相等说明有跨省用户或游客分组重复计数"
+
+  dws_funnel_daily:
+    layer: dws
+    name_cn: 六层转化漏斗（日）
+    grain: 天
+    pk: [dt]
+    pk_unique: true
+    versions: none
+    partition: [dt]
+    rows: 35
+    path: /warehouse/music_dw/dws_funnel_daily
+    catalog: hive_catalog
+    database: music_dw
+    caveats:
+      - "pay_conv_rate 的分母是**曝光**（付费/曝光），不是完播；docs/20 §5.1 写的是五层漏斗，实现是六层，以本表为准"
+      - "ctr 恒为 0.2、click_to_play_rate 恒为 1.0，是生成器设定导致的退化，不是业务结论"
+
+  dws_search_daily:
+    layer: dws
+    name_cn: 搜索词日粒度汇总
+    grain: 搜索词 × 天
+    pk: [dt, keyword]
+    pk_unique: true
+    versions: none
+    partition: [dt]
+    rows: 350
+    path: /warehouse/music_dw/dws_search_daily
+    catalog: hive_catalog
+    database: music_dw
+    caveats:
+      - "350 = 10 搜索词 × 35 天，词表很小"
+
+  dws_revenue_daily:
+    layer: dws
+    name_cn: 收入日粒度汇总
+    grain: 天
+    pk: [dt]
+    pk_unique: true
+    versions: none
+    partition: [dt]
+    rows: 35
+    path: /warehouse/music_dw/dws_revenue_daily
+    catalog: hive_catalog
+    database: music_dw
+    caveats:
+      - "arpu 字段名与口径不符，实为 ARPPU（净收入/付费用户数），见 glossary.traps.arpu_misnamed"
+      - "金额列全部 DECIMAL(18,2)"
+
+  # ---------------------------------------------------------------- ADS
+  ads_daily_overview:
+    layer: ads
+    name_cn: 日报概览
+    grain: 天
+    pk: [dt]
+    pk_unique: true
+    versions: none
+    partition: [dt]
+    rows: 35
+    path: /warehouse/music_dw/ads_daily_overview
+    catalog: hive_catalog
+    database: music_dw
+    caveats:
+      - "dau / session_cnt 来自 dws_user_daily，2026-11-09 起口径为「启动过 App 的全量活跃」：dau = COUNT(DISTINCT COALESCE(NULLIF(user_id,''), device_id))，session_cnt = app_launch 的全量会话"
+      - "旧版此处是「有起播的用户/会话」，实测低 22%（2,525 vs 3,237 / 2,542 vs 3,270），已废弃"
+      - "跨天算完播率必须重算，ROUND 后的比率再 AVG 会有假精度"
+
+  ads_song_ranking:
+    layer: ads
+    # 名字必须把排序键写出来：叫"歌曲榜 Top20"时，模型看到"排行榜"三个字
+    # 就会拿它答"播放量排行榜"，而它实际按完播率排——实测 2026-11-08
+    # 榜首只有 34 次起播，真实播放量 Top1（264 次）根本不在榜上。
+    name_cn: 歌曲榜 Top20（按完播率排序，非播放量榜）
+    grain: 天 × 名次（每天 20 行）
+    pk: [dt, rank_no]
+    pk_unique: true
+    versions: none
+    partition: [dt]
+    rows: 700
+    path: /warehouse/music_dw/ads_song_ranking
+    catalog: hive_catalog
+    database: music_dw
+    # 使用边界：问题里出现这些词时**不要召回本表**。
+    # caveats 是给模型看的"注意"，实测模型照样选它（表名 song_ranking + 字段齐，
+    # 对"排行榜"的吸引力压过了 caveat 里那句"按完播率排"）。所以改成在选表阶段
+    # 直接剔除——能被绕过的提示不算约束。
+    not_for: ["播放量", "播放次数", "起播", "听歌量"]
+    caveats:
+      - "rank_no 按**完播率**降序，与 play_start_cnt 无关：2026-11-08 榜首仅 34 次起播，播放量 Top1（264 次）不在榜内"
+      - "问「播放量最高 / 播放量排行榜」不要用本表，改在 dws_song_play_daily 上 ORDER BY play_start_cnt + JOIN dim_song 取歌名"
+      - "700 = 20 名 × 35 天；只能取榜单，SUM(play_start_cnt) 会得到 574 而已，远小于全站 12,710"
+      - "rank_no 每天从 1 重排，跨天比名次要用 rank_no，不能用 song_id 排序"
+
+  ads_genre_dist:
+    layer: ads
+    name_cn: 曲风分布
+    grain: 曲风 × 天
+    pk: [dt, genre]
+    pk_unique: true
+    versions: none
+    partition: [dt]
+    rows: 140
+    path: /warehouse/music_dw/ads_genre_dist
+    catalog: hive_catalog
+    database: music_dw
+    caveats:
+      - "start_share 是当日占比，跨天不能直接相加"
+
+  ads_province_dist:
+    layer: ads
+    name_cn: 省份分布
+    grain: 省 × 天
+    pk: [dt, province]
+    pk_unique: true
+    versions: none
+    partition: [dt]
+    rows: 1085
+    path: /warehouse/music_dw/ads_province_dist
+    catalog: hive_catalog
+    database: music_dw
+    caveats:
+      - "1085 = 31 省 × 35 天（比 dws_province_daily 的 78 组合/天少，因为这里只到省）"
+      - "dau_share 每日合计 = 1.0；且 SUM(dau) 与全站 dau **精确相等**（2026-11-09 实测 113,131 = 113,131）—— 这是地域口径正确性的硬判据，不相等就一定有 bug"
+      - "sum(dau) 曾经比全站多 71（游客在含游客的 (省,市) 组各计 1 次），已由设备实体去重修复"
+
+  ads_user_retention:
+    layer: ads
+    name_cn: 留存同期群
+    grain: 同期群(cohort_date) × 第 N 日(day_n)
+    pk: [cohort_date, day_n]
+    pk_unique: true
+    versions: none
+    partition: []
+    rows: 217
+    path: /warehouse/music_dw/ads_user_retention
+    catalog: hive_catalog
+    database: music_dw
+    caveats:
+      - "**没有 dt 分区**，用 cohort_date 过滤；写成 WHERE dt=... 会报 Invalid table alias"
+      - "day_n 是「第 N 日」不是日期；day_n=1 才是次日留存"
+      - "217 行：D1 有 34 个 cohort，逐天递减到 D7 的 28 个（窗口尾部没有 7 天可观测）"
+      - "retention_rate 已是比率，跨 cohort 求平均要按 cohort_size 加权，不能直接 AVG"
+
+  ads_funnel:
+    layer: ads
+    name_cn: 六层漏斗
+    grain: 天
+    pk: [dt]
+    pk_unique: true
+    versions: none
+    partition: [dt]
+    rows: 35
+    path: /warehouse/music_dw/ads_funnel
+    catalog: hive_catalog
+    database: music_dw
+    caveats:
+      - "pay_cnt 含订阅+下单，不含退款"
+      - "pay_cnt_dod 是日环比，第一天为 NULL"
+      - "中间两层（ctr / click_to_play_rate）无方差，做趋势分析没有信息量"
+
+  ads_revenue:
+    layer: ads
+    name_cn: 收入报表
+    grain: 天
+    pk: [dt]
+    pk_unique: true
+    versions: none
+    partition: [dt]
+    rows: 35
+    path: /warehouse/music_dw/ads_revenue
+    catalog: hive_catalog
+    database: music_dw
+    caveats:
+      - "arpu 字段实为 ARPPU，见 glossary.traps.arpu_misnamed"
+      - "cum_net_revenue 是累计值，最后一行的值才是全窗口净收入"
+      - "net_revenue = gross_revenue - refund_amount，三个字段不要重复相加"
+
+  dev_province_revenue_daily:
+    layer: dev
+    name_cn: 省份×日收入净额（工程师开发表）
+    grain: 省 × 天
+    pk: [dt, province]
+    pk_unique: true
+    versions: none
+    partition: none
+    rows: 1078
+    path: /warehouse/music_dw/dev_province_revenue_daily
+    catalog: hive_catalog
+    database: music_dw
+    caveats:
+      - "net_revenue 与 revenue_sum 指标口径逐分对齐（含 vip_subscribe、退款取负），35 天合计 823,410 = ads_revenue.net_revenue 合计"
+      - "数据截至 2026-11-08；dwd_pay 支付类事件最早出现在 2026-10-05"
+      - "由 Agent ETL 流程生成、etlguard 校验、人工复核口径后执行（2026-11-11）；源表更新后需重跑 CTAS 刷新本表"
+
+  dev_province_daily_top20_user:
+    layer: dev
+    name_cn: 分省每日消费金额Top20用户
+    grain: 天 × province × user_id
+    pk: [dt, province, user_id]
+    pk_unique: true
+    versions: none
+    partition: none
+    rows: 17178
+    path: /warehouse/music_dw/dev_province_daily_top20_user
+    catalog: hive_catalog
+    database: music_dw
+    caveats:
+      - "由 Agent ETL 流程生成、etlguard 校验、执行后回读（2026-11-11，17178 行）"
+      - "数据窗口 2026-10-05 ~ 2026-11-08；源表更新后由每日调度脚本重刷"
+      - "业务口径来源：统计每个省份每日消费金额的top20用户，并且每天要自动更新"
+      - "列结构由执行后 DESCRIBE 实测生成；口径若要成为命名指标，需在 metrics.yaml 补指标定义（会进入口径评测）"

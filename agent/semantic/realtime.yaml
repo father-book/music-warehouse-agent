@@ -1,0 +1,113 @@
+# 实时链路历史快照 —— Agent 可查的第二条数据面
+#
+# 背景（2026-11-11 实测）：Flink 链路自 2026-11-08 22:17 之后未再产出，
+# 但 internal.music_dw 里保留着它当时产出的分钟级/10 分钟级结果与质检明细。
+# 这些是**历史快照**，不是"现在"。此前 config.lane.realtime.enabled=false
+# 让 Agent 碰到实时词就一律拒答，等于这批数据白存了。
+#
+# 接入原则（三条，缺一不可）：
+#  1. 只登记白名单里的 9 张表，不碰 dwd_unrouted（27 万行）等同名明细大表
+#     —— 离线库里有同名 dwd_play_start，混查会差 6.2 倍（docs/34）。
+#  2. 实时表必须用三段式 internal.music_dw.<table>，护栏 R17 按白名单精确放行，
+#     R26 强制带时间列过滤，防止把整张历史表扫进结果。
+#  3. 纯"现在/此刻/当前"的问题仍然拒答；能答的是"历史快照窗口内"的问题，
+#     且答案必须带新鲜度声明（见 freshness_note）。
+#
+# 行数与时间窗来自 2026-11-11 root 实测，改动数据后要同步这里。
+lane: rt
+catalog: internal
+database: music_dw
+status: down                       # down = 链路不再产出，只有历史快照
+data_since: "2026-11-02 16:32"
+data_until: "2026-11-08 22:17"
+freshness_note: "实时链路历史快照，窗口 2026-11-02 16:32 ~ 2026-11-08 22:17；链路已停止产出，不代表当前时刻"
+default_time_col: stat_minute
+
+tables:
+
+  ops_data_quality:
+    name_cn: 实时埋点分钟级质量
+    grain: 分钟
+    time_col: stat_minute
+    rows: 1043
+    columns: {stat_minute: DATETIME, events_1m: BIGINT, errors_1m: BIGINT, error_rate: DOUBLE, top_rule: "VARCHAR(64)", top_rule_cnt: BIGINT, updated_at: DATETIME}
+    caveats:
+      - "error_rate 是比率型字段，不能跨分钟直接 AVG（R8 会拦）"
+      - "每分钟一行；问某一天的错误率要用 SUM(errors_1m)/SUM(events_1m)"
+
+  ops_pipeline_latency:
+    name_cn: 实时链路分钟级延迟
+    grain: 分钟
+    time_col: stat_minute
+    rows: 1043
+    columns: {stat_minute: DATETIME, ods_lag_s: INT, dwd_lag_s: INT, dws_lag_s: INT, ads_lag_s: INT, input_rate: DOUBLE, dwd_rows_1m: BIGINT, kafka_lag_rows: BIGINT, updated_at: DATETIME}
+    caveats:
+      - "lag 单位是秒；*_lag_s 是各层相对事件时间的端到端延迟"
+      - "kafka_lag_rows 是积压行数，与延迟不是同一个指标"
+
+  ops_job_health:
+    name_cn: Flink 作业分钟级健康
+    grain: 分钟 × 作业
+    time_col: stat_minute
+    rows: 4172
+    columns: {stat_minute: DATETIME, job_name: "VARCHAR(64)", job_id: "VARCHAR(64)", state: "VARCHAR(16)", run_seconds: BIGINT, ckpt_size_mb: DOUBLE, ckpt_age_s: INT, ckpt_failed: INT, updated_at: DATETIME}
+    caveats:
+      - "一个分钟可能有多个 job，按 job_name 分组，不要直接 SUM(run_seconds)"
+
+  ads_client_quality_1min:
+    name_cn: 客户端分钟级播放质量
+    grain: 分钟
+    time_col: stat_minute
+    rows: 633
+    columns: {stat_minute: DATETIME, play_cnt: BIGINT, error_cnt: BIGINT, error_rate: DOUBLE, top_error_code: "VARCHAR(16)", top_error_cnt: BIGINT, updated_at: DATETIME}
+    caveats:
+      - "与 ops_data_quality 的区别：这张看客户端播放错误，那张看埋点规则校验"
+
+  ads_session_1min:
+    name_cn: 分钟级会话与跳出
+    grain: 分钟
+    time_col: stat_minute
+    rows: 645
+    columns: {stat_minute: DATETIME, session_cnt: BIGINT, avg_evts_per_sess: DOUBLE, bounce_sess_cnt: BIGINT, bounce_rate: DOUBLE, updated_at: DATETIME}
+    caveats:
+      - "这里的 session 是实时链路按 30 分钟不活动切分，与离线 dwd_session 口径不同"
+
+  ads_song_rank_10min:
+    name_cn: 10 分钟歌曲榜
+    grain: 10 分钟 × 歌曲 × 名次
+    time_col: window_start
+    rows: 8153
+    columns: {window_start: DATETIME, rank_no: INT, song_id: "VARCHAR(32)", play_cnt: BIGINT, uv: BIGINT, skip_rate: DOUBLE, updated_at: DATETIME}
+    caveats:
+      - "窗口列是 window_start 不是 stat_minute；一个窗口里每首歌一行"
+      - "只能和同窗口的表比名次，不能与离线 ads_song_ranking 直接比"
+
+  ads_province_10min:
+    name_cn: 10 分钟省份播放分布
+    grain: 10 分钟 × 省份
+    time_col: window_start
+    rows: 7842
+    columns: {window_start: DATETIME, province: "VARCHAR(32)", play_cnt: BIGINT, uv: BIGINT, play_share: DOUBLE, updated_at: DATETIME}
+    caveats:
+      - "play_share 是窗口内占比，跨窗口求和没有意义"
+
+  ads_realtime_overview:
+    name_cn: 实时链路日级总览
+    grain: 天
+    time_col: stat_date
+    rows: 3
+    columns: {stat_date: DATE, total_play: BIGINT, total_uv: BIGINT, login_uv: BIGINT, finish_rate: DOUBLE, skip_rate: DOUBLE, avg_play_duration: DOUBLE, active_minutes: INT, last_event_ts: DATETIME, updated_at: DATETIME}
+    caveats:
+      - "只有 3 天（11-06~11-08）；与离线 ads_daily_overview 口径不同，不要混用"
+      - "last_event_ts 是快照里最后一个事件时间，可用来判断链路何时停的"
+
+  dwd_quality_error:
+    name_cn: 实时质检异常明细
+    grain: 每条异常事件
+    time_col: dt
+    alt_time_col: event_ts
+    rows: 15349
+    columns: {event_id: "VARCHAR(64)", rule_name: "VARCHAR(64)", event_name: "VARCHAR(32)", rule_level: "VARCHAR(16)", detail: "VARCHAR(512)", song_id: "VARCHAR(32)", user_id: "VARCHAR(32)", device_id: "VARCHAR(32)", event_ts: DATETIME, raw_properties: TEXT, etl_time: DATETIME, dt: DATE}
+    caveats:
+      - "异常明细含 user_id/device_id，产品经理角色会被列级策略拦下（不是 bug）"
+      - "rule_name 对应实时校验规则；按规则聚合能看出哪种异常最多"

@@ -1,0 +1,147 @@
+# 统一数据质量规则表（P2 / 论文第四章 L0~L5 的可执行清单）
+#
+# 为什么要这张表：此前"质量规则"散在五个地方——
+#   agent/guards/guard.py（27 条 SQL 护栏）、metrics.yaml.caliber_guard（6 条口径，2026-11-15 起 C4~C6 为 REJECT）、
+#   sem_check.py（15 组结构检查）、etl_rowcount.py（行数新鲜度）、
+#   internal.music_dw.ops_*（实时质量指标）。
+# 谁也说不出"今天的数据质量到底几分"，也没法回答"这个月哪条规则最常亮"。
+# 本表做两件事：
+#   · families —— 把已有规则族**登记**进来（声明式，规则仍由原模块执行）
+#   · checks   —— 12 条可自动执行的汇总检查，结果落库形成趋势
+#
+# 判定：ok = value <op> limit；不 ok 且 severity != info → alert。
+# severity: reject（必须阻断）/ warn（黄牌）/ info（只记录）。
+# 阈值是**可配置的判断**，不是硬编码在代码里的 if；改口径改这里。
+
+version: 1
+verified_at: "2026-11-11"
+
+families:
+  - {id: L0, name_cn: 结构与元数据一致性, count: 173, unit: 项, impl: agent/semantic/sem_check.py, evidence: "15 组交叉断言，含 [12]/[13]/[15] 同步检查"}
+  - {id: L1, name_cn: SQL 静态护栏, count: 27, unit: 条, impl: agent/guards/guard.py, evidence: "R1~R27（R27 维表必须按主键关联，2026-11-15 由 C18 引入），P50 1.3ms / P95 1.9ms"}
+  - {id: L2, name_cn: 口径机检规则, count: 6, unit: 条, impl: agent/guards/caliber.py + metrics.yaml, evidence: "C1 收入事件覆盖 / C2 退款符号 / C3 UV 源表 / C4 完播率分母 / C5 用户占比分母 / C6 占比分子分母同源"}
+  - {id: L3, name_cn: 执行实证, count: 4, unit: 类, impl: code/agent/etlguard.py + etl_exec.py, evidence: "EXPLAIN / REFRESH / 回读 / 行数校准"}
+  - {id: L4, name_cn: 门禁与留痕, count: 5, unit: 条, impl: eval/gate.py + code/agent/etl_gate.py, evidence: "分域降 >3 点失败、金额类二次确认、不可变审计"}
+  - {id: L5, name_cn: 实时链路质量, count: 9, unit: 张表, impl: agent/semantic/realtime.yaml, evidence: "ops_* 三张分钟表 + dwd_quality_error 异常明细 + 5 张 ADS 结果表"}
+
+checks:
+
+  - id: DQ01
+    name_cn: 语义层一致性检查失败数
+    layer: L0
+    severity: reject
+    metric: fail_count
+    op: "=="
+    limit: 0
+    source: agent/semantic/sem_check.py
+    why: "YAML 改了忘重生成 tables.json，护栏会拿着旧事实放行"
+
+  - id: DQ02
+    name_cn: 护栏反向断言漏拦数
+    layer: L1
+    severity: reject
+    metric: missed_count
+    op: "=="
+    limit: 0
+    source: agent/guards/guard.py
+    why: "错口径 UV / internal 越表 / 实时离线混查，三条必须都被 REJECT"
+
+  - id: DQ03
+    name_cn: 口径机检能否检出 5.24 倍事故
+    layer: L2
+    severity: reject
+    metric: detected
+    op: "=="
+    limit: 1
+    source: agent/guards/caliber.py
+    why: "把漏 vip_subscribe 的收入 SQL 喂进去，必须报 R25 WARN"
+
+  - id: DQ04
+    name_cn: 行数快照漂移表数
+    layer: L0
+    severity: warn
+    metric: drift_count
+    op: "=="
+    limit: 0
+    source: code/agent/etl_rowcount.py
+    why: "dev 表每日重刷后 rowcount.tsv 过期，sem_check 会天天亮红灯"
+
+  - id: DQ05
+    name_cn: 实时总体异常率
+    layer: L5
+    severity: warn
+    metric: error_rate_pct
+    op: "<="
+    limit: 10.0
+    source: internal.music_dw.ops_data_quality
+    why: "Σerrors/Σevents 而非 AVG(分钟比率)；历史实测 4.4068%"
+
+  - id: DQ06
+    name_cn: 实时分钟异常率峰值
+    layer: L5
+    severity: warn
+    metric: peak_error_rate_pct
+    op: "<="
+    limit: 60.0
+    source: internal.music_dw.ops_data_quality
+    why: "历史峰值 47.75%，阈值留 12 个点余量，避免常态告警"
+
+  - id: DQ07
+    name_cn: 实时链路状态
+    layer: L5
+    severity: info
+    metric: lane_up
+    op: ">="
+    limit: 0
+    source: agent/semantic/realtime.yaml
+    why: "status=down 是已知事实，只记录不作为失败；恢复产出改这里即可"
+
+  - id: DQ08
+    name_cn: 评测基线通过率
+    layer: L4
+    severity: reject
+    metric: pass_pct
+    op: ">="
+    limit: 95.0
+    source: eval/baseline.json
+    why: "126 题基线，门禁阈值 3 个百分点；低于 95% 说明答案层退化"
+
+  - id: DQ09
+    name_cn: 回归门禁最近一次全量结果
+    layer: L4
+    severity: warn
+    metric: ci_failed
+    op: "=="
+    limit: 0
+    source: eval/history.jsonl
+    why: "只取 partial=false 的全量回归；quick/--id 题目不全，拿它算失败数必然是 0，会把门禁做成假绿。无 full 记录时回退最后一条并在说明中标注；无记录则判失败(-1)"
+
+  - id: DQ10
+    name_cn: ETL 最近一次执行成功
+    layer: L3
+    severity: warn
+    metric: exec_ok
+    op: "=="
+    limit: 1
+    source: governance.etl_scripts.checks->exec
+    why: "执行结论必须由回读判定，不能只看 Hive 退出码"
+
+  - id: DQ11
+    name_cn: 实时表白名单同步表数
+    layer: L0
+    severity: reject
+    metric: rt_table_count
+    op: "=="
+    limit: 9
+    source: agent/tables.json + agent/semantic/realtime.yaml
+    why: "白名单漂移会让 R17/R26 静默失效"
+
+  - id: DQ12
+    name_cn: 实时表角色授权缺口数
+    layer: L4
+    severity: reject
+    metric: grant_gap
+    op: "=="
+    limit: 0
+    source: governance.policies
+    why: "语义层登记了但没授权 = 表存在却查不了（2026-11-11 踩过）"

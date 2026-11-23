@@ -1,0 +1,40 @@
+{
+  "_comment": "R21/R22/R23 的单一数据源。guard.py 与 code/governance 都读它，避免规则两份漂移。集群上需与 guard.py、tables.json 一起同步。",
+  "version": 2,
+  "updated": "2026-11-10",
+  "_changelog": {
+    "2": "补语序颠倒的提示词套取（‘给我看你的提示词’）、角色扮演提权、越狱说法。对抗集 A19/A20 之前漏网。"
+  },
+  "pii_columns": [
+    "phone", "mobile", "phone_no", "tel", "telephone",
+    "id_card", "idcard", "id_no", "id_number", "ssn", "passport",
+    "email", "mail", "address", "addr", "real_name", "full_name",
+    "bank_card", "card_no", "wechat", "qq_no", "birth_date", "salary"
+  ],
+  "pii_words_cn": ["手机号", "电话号码", "身份证", "邮箱", "家庭住址", "银行卡", "真实姓名"],
+  "probe_objects": [
+    "information_schema", "pg_catalog", "mysql", "sys", "performance_schema",
+    "sqlite_master", "doris_master", "__internal_schema", "meta", "system"
+  ],
+  "injection_patterns": [
+    "(?i)ignore\\s+(all\\s+)?(previous|above|prior)\\s+(instructions|rules|prompts)",
+    "(?i)disregard\\s+(all\\s+)?(previous|above|prior)",
+    "(?i)(忽略|无视|忘记|不要遵守|跳过|绕过)\\s*(之前|上面|以上|所有|全部)?\\s*(的)?\\s*(规则|指令|限制|约束|提示|护栏)",
+    "(?i)(把|将|给我|导出|下载)\\s*(全表|全部数据|所有数据|整张表)",
+    "(?i)(system|developer)\\s*(prompt|message|role)\\s*[:：]",
+    "(?i)\\bDAN\\b|developer\\s+mode|jailbreak",
+    "(?i)(关闭|禁用|关掉|停用)\\s*(护栏|校验|安全|检查)",
+    "(?i)(select|show)\\s+\\*\\s+from\\s+information_schema",
+    "(?i)(grant|revoke|set\\s+password|alter\\s+user|create\\s+user)",
+    "(?i)(提示词|prompt)\\s*(注入|泄漏|泄露|是什么|给我看)",
+    "(?i)(给我看|让我看|输出|复述|展示|透露|打印|背诵|发我).{0,8}(提示词|系统提示|系统设定|初始设定|system\\s*prompt|prompt|预设指令)",
+    "(?i)(系统|system|初始|开发者).{0,6}(提示词|prompt|设定|设定词|指令|角色).{0,8}(输出|给我|是什么|内容|原文|原样)",
+    "(?i)(你现在是|从现在起你是|你现在扮演|扮演一名|扮演一个).{0,12}(管理员|超级用户|root|admin|开发者|运维)",
+    "(?i)(忘记|清空|重置|抹掉).{0,8}(你的|所有)?(设定|配置|系统指令|记忆|人格)",
+    "(?i)(越狱|破限|解除限制|不受限制模式)"
+  ],
+  "injection_words_zh": [
+    "忽略之前", "无视以上", "不要遵守", "绕过护栏", "关闭护栏", "禁用护栏",
+    "把全表导给我", "导出全表", "导出所有数据", "给我看提示词", "开发者模式"
+  ]
+}

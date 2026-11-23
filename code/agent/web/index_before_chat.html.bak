@@ -1,0 +1,1068 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Data Agent · 问数</title>
+<style>
+/* ============================================================
+   浅色单栏对话界面
+   约束：
+   1) 只有一套浅色主题，不再有深色切换
+   2) 主界面只有一个对话框：不设右侧过程面板
+   3) 执行过程收进答案卡里的折叠区，默认关闭，需要时才展开
+   4) 层级靠 1px 细线和留白，不靠阴影和色块
+   ============================================================ */
+:root{
+  --ui:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  --mono:ui-monospace,"SF Mono","JetBrains Mono","Cascadia Code",Consolas,"Liberation Mono",Menlo,monospace;
+
+  --bg:#ffffff; --surface:#ffffff; --surface-2:#fafafa; --surface-3:#f2f2f0;
+  --border:#e8e8e5; --border-2:#d6d6d2;
+  --text:#18181b; --muted:#71717a; --faint:#a1a1aa;
+
+  --primary:#2563eb; --primary-soft:rgba(37,99,235,.06); --primary-line:rgba(37,99,235,.22);
+  --ok:#15803d; --ok-soft:rgba(21,128,61,.06); --ok-line:rgba(21,128,61,.22);
+  --warn:#a16207; --warn-soft:rgba(161,98,7,.06); --warn-line:rgba(161,98,7,.22);
+  --err:#c02626; --err-soft:rgba(192,38,38,.06); --err-line:rgba(192,38,38,.22);
+
+  --accent-bg:#18181b; --accent-fg:#ffffff;
+  --code:#141416; --code-text:#d8d8da;
+
+  --r:10px; --r-sm:6px; --width:780px;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;
+  font:14px/1.65 var(--ui);display:flex;flex-direction:row;height:100%;overflow:hidden}
+
+/* ---------- 侧边栏：会话历史 ---------- */
+.side{width:264px;flex:none;display:flex;flex-direction:column;background:var(--surface-2);
+  border-right:1px solid var(--border);min-height:0}
+body.side-hidden .side{display:none}
+.side-head{padding:12px 12px 8px}
+.new-chat{width:100%;height:34px;border:1px solid var(--border-2);border-radius:8px;
+  background:var(--surface);font-size:12.5px;color:var(--text);
+  display:flex;align-items:center;justify-content:center;gap:6px}
+.new-chat:hover{background:var(--bg);border-color:var(--faint)}
+.new-chat span{font-size:15px;line-height:1;color:var(--muted)}
+.side-list{flex:1;overflow-y:auto;padding:2px 8px 8px}
+.conv{position:relative;padding:8px 26px 8px 10px;border-radius:6px;cursor:pointer;
+  display:flex;flex-direction:column;gap:2px}
+.conv:hover{background:var(--surface-3)}
+.conv.active{background:var(--surface-3)}
+.conv.active:before{content:"";position:absolute;left:0;top:7px;bottom:7px;width:2px;
+  background:var(--text);border-radius:2px}
+.conv .ct{font-size:12.5px;color:var(--text);white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;line-height:1.45}
+.conv .cm{font:10.5px var(--mono);color:var(--faint)}
+.conv .cdel{position:absolute;right:5px;top:50%;transform:translateY(-50%);width:20px;
+  height:20px;border:0;border-radius:4px;background:none;color:var(--faint);
+  font-size:14px;line-height:1;display:none;place-items:center;padding:0}
+.conv:hover .cdel{display:grid}
+.conv .cdel:hover{background:var(--err-soft);color:var(--err)}
+.conv-empty{padding:18px 10px;font-size:11.5px;color:var(--faint);text-align:center;line-height:1.8}
+.side-foot{padding:8px 14px;border-top:1px solid var(--border);font:10.5px var(--mono);color:var(--faint)}
+.side-btn{border:0;background:none;color:var(--muted);font-size:15px;line-height:1;
+  padding:4px 7px;border-radius:5px;flex:none}
+.side-btn:hover{background:var(--surface-2);color:var(--text)}
+.side-mask{display:none}
+button,input{font-family:inherit;color:inherit}
+button{cursor:pointer;background:none}
+a{color:var(--primary);text-decoration:none}
+a:hover{text-decoration:underline}
+::selection{background:#e6efff}
+*::-webkit-scrollbar{width:9px;height:9px}
+*::-webkit-scrollbar-thumb{background:#dcdcd8;border-radius:9px;border:2px solid var(--bg)}
+*::-webkit-scrollbar-thumb:hover{background:#c4c4be}
+*::-webkit-scrollbar-track{background:transparent}
+
+/* ---------- header：一条细线 ---------- */
+header{height:52px;flex:none;background:var(--bg);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:14px;padding:0 20px;position:relative;z-index:20}
+.brand{display:flex;align-items:center;gap:10px;font-size:13.5px;font-weight:600;letter-spacing:-.01em}
+.logo{width:23px;height:23px;border-radius:5px;background:var(--accent-bg);color:#fff;
+  display:grid;place-items:center;font:600 15px/1 var(--mono);padding-bottom:2px}
+.brand small{display:block;font:400 11px var(--mono);color:var(--faint);letter-spacing:0;margin-top:1px}
+.hstat{margin-left:auto;display:flex;align-items:center;gap:14px}
+.pill{display:flex;align-items:center;gap:6px;font:11.5px var(--mono);color:var(--muted);white-space:nowrap}
+.dot{width:5px;height:5px;border-radius:50%;background:var(--ok);flex:none}
+.dot.blue{background:var(--primary)} .dot.amber{background:var(--warn)}
+.dot.red{background:var(--err)} .dot.gray{background:var(--faint)}
+
+.ghost{background:none;border:1px solid var(--border);border-radius:var(--r-sm);color:var(--muted);
+  font-size:11.5px;padding:5px 10px;transition:.12s}
+.ghost:hover{background:var(--surface-2);border-color:var(--border-2);color:var(--text);text-decoration:none}
+a.ghost{display:inline-block;line-height:1.35}
+
+/* 状态浮层：技术指标不摆在主界面上，但也没丢 */
+.status-pop{position:absolute;top:48px;right:16px;width:330px;background:var(--surface);
+  border:1px solid var(--border-2);border-radius:10px;box-shadow:0 16px 40px rgba(0,0,0,.10);
+  padding:6px;z-index:30}
+.status-pop[hidden]{display:none}
+.srow{display:flex;align-items:baseline;gap:8px;padding:7px 10px;border-radius:6px;font-size:12px}
+.srow:hover{background:var(--surface-2)}
+.srow .k{color:var(--faint);font:10.5px var(--mono);min-width:64px;flex:none}
+.srow .v{color:var(--text);font-family:var(--mono);font-size:11.5px;word-break:break-all}
+.status-pop .sep{height:1px;background:var(--border);margin:4px 6px}
+
+/* ---------- 单栏主体 ---------- */
+#app{flex:1;display:flex;flex-direction:column;min-height:0;min-width:0}
+#messages{flex:1;overflow-y:auto;padding:30px 24px 6px;scroll-behavior:smooth}
+#messages > *{max-width:var(--width);margin:0 auto 26px}
+
+/* 空态：标题 + 一点说明 + 示例问题 */
+.empty{display:flex;flex-direction:column;justify-content:center;min-height:100%;
+  text-align:center;color:var(--faint);padding-bottom:40px}
+.empty .etitle{font-size:20px;font-weight:600;color:var(--text);letter-spacing:-.02em;margin-bottom:6px}
+.empty .esub{font-size:13px;color:var(--muted);line-height:1.8;margin-bottom:26px}
+.empty .esub b{color:var(--text);font-weight:500}
+.quick{display:flex;gap:7px;flex-wrap:wrap;justify-content:center;max-width:600px;margin:0 auto}
+.chip{font:11.5px var(--mono);color:var(--muted);background:transparent;
+  border:1px solid var(--border);border-radius:6px;padding:5px 10px;transition:.12s}
+.chip:hover{border-color:var(--border-2);background:var(--surface-2);color:var(--text)}
+.chip.refuse{border-style:dashed;color:var(--err);border-color:var(--err-line)}
+.chip.refuse:hover{background:var(--err-soft);border-color:var(--err-line)}
+
+.msg{animation:fade .2s ease}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+/* 用户输入：终端提示符，不做气泡 */
+.q{display:flex;gap:10px;align-items:baseline;margin-bottom:12px}
+.q .avatar{width:auto;height:auto;flex:none;background:none;color:var(--faint);font-size:0}
+.q .avatar:after{content:"›";font:500 16px/1.35 var(--mono);color:var(--faint)}
+.q .txt{background:none;border:0;padding:0;font-size:15px;color:var(--text);
+  font-weight:450;line-height:1.6}
+
+/* ---------- 答案卡片 ---------- */
+.card{border:1px solid var(--border);border-radius:var(--r);overflow:hidden;background:var(--surface)}
+.card-top{padding:13px 16px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.card-top h2{margin:0;font-size:14.5px;font-weight:600;letter-spacing:-.01em}
+.tag{font:10.5px var(--mono);padding:2px 6px;border-radius:4px;background:var(--surface-2);
+  border:1px solid transparent;color:var(--muted);letter-spacing:.02em}
+.tag.ok{background:var(--ok-soft);color:var(--ok);border-color:var(--ok-line)}
+.tag.err{background:var(--err-soft);color:var(--err);border-color:var(--err-line)}
+.tag.info{background:var(--primary-soft);color:var(--primary);border-color:var(--primary-line)}
+.card-body{padding:16px}
+
+/* 单值指标：竖线分隔 */
+.hero{display:flex;gap:0;flex-wrap:wrap;margin:0 0 16px}
+.hero-item{padding:2px 22px 2px 14px;border-left:1px solid var(--border-2);min-width:120px}
+.hero-item:first-child{padding-left:0;border-left:0}
+.hero-item .k{display:block;font:10.5px var(--mono);color:var(--faint);margin-bottom:4px;
+  letter-spacing:.03em;white-space:nowrap}
+.hero-item .v{font-size:26px;font-weight:600;letter-spacing:-.03em;
+  font-variant-numeric:tabular-nums;line-height:1.2}
+
+/* 表格：只有横线 */
+.table-wrap{overflow-x:auto;border-top:1px solid var(--border);margin:0 0 16px}
+table{border-collapse:collapse;width:100%;font-size:12.5px;font-variant-numeric:tabular-nums}
+th{background:none;color:var(--faint);text-align:left;font:11.5px var(--mono);
+  padding:8px 10px;border-bottom:1px solid var(--border);white-space:nowrap;letter-spacing:.02em}
+th:first-child,td:first-child{padding-left:0}
+td{padding:8px 10px;border-bottom:1px solid var(--border);white-space:nowrap;color:var(--text)}
+tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:var(--surface-2)}
+
+/* 元信息：格子线用 outline 内缩画，行末不满时不会露出灰底 */
+.meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  border:1px solid var(--border);border-radius:var(--r-sm);overflow:hidden;margin:0 0 16px}
+.meta div{background:var(--surface);padding:9px 12px;font-size:12px;line-height:1.5;
+  outline:1px solid var(--border);outline-offset:-1px}
+.meta b{color:var(--faint);font:400 10.5px var(--mono);display:block;letter-spacing:.04em;margin-bottom:2px}
+
+/* 提示条 */
+.note{font-size:12.5px;padding:7px 12px;border-radius:0 4px 4px 0;margin:0 0 10px;
+  line-height:1.65;background:transparent;border-left:2px solid var(--border-2);color:var(--muted)}
+.note.info{background:var(--primary-soft);border-left-color:var(--primary);color:var(--text)}
+.note.warn{background:var(--warn-soft);border-left-color:var(--warn);color:var(--text)}
+.note.err{background:var(--err-soft);border-left-color:var(--err);color:var(--text)}
+
+.details-meta{white-space:pre-wrap;line-height:1.9;font-size:13.5px;color:var(--text)}
+.details-meta code{background:var(--surface-2);border:1px solid var(--border);border-radius:4px;
+  padding:1px 5px;font:11.5px var(--mono);color:var(--primary)}
+.details-meta b{color:var(--text);font-weight:600}
+
+/* SQL 块 */
+.sqlbox{background:var(--code);border:1px solid var(--border);border-radius:var(--r-sm);
+  overflow:hidden;margin-top:4px}
+.sqlbox .bar{display:flex;align-items:center;gap:8px;padding:6px 10px;
+  border-bottom:1px solid rgba(255,255,255,.07);color:#8b8f97;font:10.5px var(--mono);letter-spacing:.03em}
+.sqlbox .bar button{margin-left:auto;background:transparent;border:1px solid rgba(255,255,255,.12);
+  color:#b3b7bf;border-radius:4px;padding:2px 8px;font:10.5px var(--mono)}
+.sqlbox .bar button:hover{background:rgba(255,255,255,.08);color:#eee}
+pre{margin:0;padding:12px 14px;overflow-x:auto;color:var(--code-text);
+  font:12px/1.7 var(--mono);white-space:pre-wrap;word-break:break-word}
+details.raw{margin-top:12px;font-size:11.5px;color:var(--faint)}
+details.raw summary{cursor:pointer;font-family:var(--mono);letter-spacing:.02em}
+details.raw summary:hover{color:var(--muted)}
+details.raw pre{background:var(--code);color:var(--code-text);border:1px solid var(--border);
+  border-radius:var(--r-sm);margin-top:8px}
+
+/* ---------- 执行过程：默认收起 ---------- */
+.fold{margin-top:14px;border-top:1px solid var(--border);padding-top:2px}
+.fold > summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;
+  padding:8px 0 2px;font:11px var(--mono);color:var(--faint);letter-spacing:.02em;user-select:none}
+.fold > summary::-webkit-details-marker{display:none}
+.fold > summary:before{content:"›";display:inline-block;transition:transform .15s;
+  font-size:13px;line-height:1;color:var(--border-2)}
+.fold[open] > summary:before{transform:rotate(90deg)}
+.fold > summary:hover{color:var(--muted)}
+.fold .fold-body{padding:6px 0 4px}
+.fold .hint{font:10.5px var(--mono);color:var(--faint)}
+
+.section-title{font:500 10px var(--mono);letter-spacing:.14em;color:var(--faint);
+  text-transform:uppercase;margin:16px 0 8px;display:flex;align-items:center;gap:8px}
+.section-title:first-child{margin-top:2px}
+.section-title:after{content:"";flex:1;height:1px;background:var(--border)}
+.steps{position:relative;padding-left:14px}
+.steps:before{content:"";position:absolute;left:3px;top:8px;bottom:8px;width:1px;background:var(--border-2)}
+.step{position:relative;padding:6px 0 6px 2px;margin-bottom:2px}
+.step:hover{background:var(--surface-2)}
+.step:before{content:"";position:absolute;left:-14px;top:13px;width:7px;height:7px;border-radius:50%;
+  background:var(--bg);border:1px solid var(--border-2);box-sizing:border-box}
+.step.ok:before{background:var(--ok);border-color:var(--ok)}
+.step.err:before{background:var(--err);border-color:var(--err)}
+.step.warn:before{background:var(--warn);border-color:var(--warn)}
+.step.info:before{background:var(--muted);border-color:var(--muted)}
+.step .h{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--muted)}
+.step .h b{font:500 11.5px var(--mono);color:var(--text)}
+.step .h .n{margin-left:auto;font:10px var(--mono);color:var(--faint)}
+.step .d{font-size:12px;color:var(--muted);margin-top:2px;word-break:break-word;line-height:1.6}
+.step details{margin-top:6px;font-size:11px;color:var(--faint)}
+.step details summary{cursor:pointer;font-family:var(--mono)}
+.step details pre{background:var(--code);border:1px solid var(--border);color:var(--code-text);
+  font:10.5px/1.6 var(--mono);padding:8px 10px;margin-top:6px;max-height:220px;overflow:auto;border-radius:4px}
+
+.badge{display:inline-block;font:10.5px var(--mono);padding:2px 7px;border-radius:4px;
+  margin:0 5px 5px 0;border:1px solid transparent}
+.badge.err{background:var(--err-soft);color:var(--err);border-color:var(--err-line)}
+.badge.warn{background:var(--warn-soft);color:var(--warn);border-color:var(--warn-line)}
+.badge.ok{background:var(--ok-soft);color:var(--ok);border-color:var(--ok-line)}
+.badge.info{background:var(--primary-soft);color:var(--primary);border-color:var(--primary-line)}
+.evol{border:1px solid var(--border);border-radius:var(--r-sm);overflow:hidden;margin-bottom:8px}
+.evol .eh{background:var(--surface-2);padding:6px 10px;font:10.5px var(--mono);color:var(--faint);
+  border-bottom:1px solid var(--border);display:flex;gap:8px}
+.evol .eh .stage{color:var(--text)}
+.evol pre{background:var(--code);color:var(--code-text);font:11px/1.6 var(--mono);padding:9px 11px}
+.fixline{font:11.5px var(--mono);color:var(--muted);padding:4px 0 4px 10px;
+  border-left:1px solid var(--border-2)}
+
+/* ---------- 输入区 ---------- */
+.composer{flex:none;position:relative;padding:10px 24px 20px;background:var(--bg);
+  max-width:calc(var(--width) + 48px);width:100%;margin:0 auto}
+.composer input{width:100%;border:1px solid var(--border);background:var(--surface);
+  border-radius:12px;height:48px;padding:0 100px 0 15px;font-size:14.5px;color:var(--text);
+  outline:none;transition:.12s;box-shadow:0 1px 2px rgba(0,0,0,.03)}
+.composer input::placeholder{color:var(--faint)}
+.composer input:focus{border-color:var(--border-2);box-shadow:0 2px 10px rgba(0,0,0,.05)}
+.composer button{position:absolute;right:34px;top:19px;border:0;border-radius:7px;
+  background:var(--accent-bg);color:var(--accent-fg);font-weight:600;font-size:12.5px;
+  height:30px;padding:0 14px;transition:opacity .12s}
+.composer button:hover{opacity:.82}
+.composer button:disabled{opacity:.35;cursor:not-allowed}
+.thinking{display:flex;align-items:center;gap:9px;color:var(--muted);font-size:12.5px;
+  padding:6px 0;font-family:var(--mono)}
+.spin{width:11px;height:11px;border:1.5px solid var(--border-2);border-top-color:var(--text);
+  border-radius:50%;animation:rot .7s linear infinite}
+@keyframes rot{to{transform:rotate(360deg)}}
+
+/* ---------- 身份 ---------- */
+.who{display:flex;align-items:center;gap:8px;padding-left:14px;border-left:1px solid var(--border);
+  font-size:11.5px;color:var(--muted);white-space:nowrap}
+.who #who-name{color:var(--text);font-weight:500}
+.who .role{font:10.5px var(--mono);background:none;color:var(--faint);
+  border:1px solid var(--border);border-radius:4px;padding:2px 6px}
+.who .ghost{padding:4px 9px}
+
+/* ---------- 弹层 ---------- */
+.overlay{position:fixed;inset:0;background:rgba(24,24,27,.34);backdrop-filter:blur(3px);
+  display:grid;place-items:center;z-index:60;padding:20px}
+.overlay[hidden]{display:none}
+.login-card{width:100%;max-width:380px;background:var(--surface);border:1px solid var(--border-2);
+  border-radius:12px;box-shadow:0 24px 60px rgba(0,0,0,.18);padding:26px 24px 20px}
+.login-card h1{margin:0 0 6px;font-size:17px;font-weight:600;letter-spacing:-.01em}
+.login-card p.sub{margin:0 0 20px;font-size:12px;color:var(--muted);line-height:1.7}
+.field{margin-bottom:12px}
+.field label{display:block;font:10.5px var(--mono);color:var(--faint);
+  margin-bottom:5px;letter-spacing:.04em}
+.field input{width:100%;height:38px;border:1px solid var(--border);border-radius:var(--r-sm);
+  padding:0 11px;font-size:13.5px;color:var(--text);background:var(--bg);outline:none}
+.field input:focus{border-color:var(--border-2);background:var(--surface-2)}
+.login-card button.primary{width:100%;height:38px;border:0;border-radius:var(--r-sm);
+  color:var(--accent-fg);font-size:13px;font-weight:600;background:var(--accent-bg);margin-top:4px}
+.login-card button.primary:hover{opacity:.86}
+.login-card button.primary:disabled{opacity:.4;cursor:default}
+.login-err{margin-top:11px;font-size:12px;color:var(--err);background:var(--err-soft);
+  border-left:2px solid var(--err);border-radius:0 4px 4px 0;padding:7px 10px;line-height:1.6}
+.login-err[hidden]{display:none}
+.accounts{margin-top:18px;padding-top:14px;border-top:1px solid var(--border);
+  font:10.5px/2 var(--mono);color:var(--faint)}
+.accounts b{color:var(--muted);font-weight:500}
+
+.audit-wrap{width:100%;max-width:1180px;max-height:86vh;background:var(--surface);
+  border:1px solid var(--border-2);border-radius:12px;
+  box-shadow:0 24px 60px rgba(0,0,0,.18);display:flex;flex-direction:column;overflow:hidden}
+.audit-head{padding:14px 18px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:12px}
+.audit-head h2{margin:0;font-size:14px;font-weight:600}
+.audit-head .sub{font:11px var(--mono);color:var(--faint)}
+.audit-head .spacer{margin-left:auto}
+.audit-body{overflow:auto;padding:16px 18px 20px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:1px;
+  background:var(--border);border-top:1px solid var(--border);border-bottom:1px solid var(--border);
+  margin-bottom:14px}
+.stat{background:var(--surface);padding:10px 12px}
+.stat .k{font:10.5px var(--mono);color:var(--faint);letter-spacing:.03em}
+.stat .v{font-size:18px;font-weight:600;margin-top:3px;font-variant-numeric:tabular-nums;
+  letter-spacing:-.02em}
+table.audit{width:100%;border-collapse:collapse;font-size:11.8px}
+table.audit th{text-align:left;font-weight:500;color:var(--faint);font:10.5px var(--mono);
+  letter-spacing:.04em;padding:7px 9px;border-bottom:1px solid var(--border-2);
+  background:var(--surface);position:sticky;top:0;z-index:1}
+table.audit td{padding:8px 9px;border-bottom:1px solid var(--border);vertical-align:top}
+table.audit tr:hover td{background:var(--surface-2)}
+table.audit .mono{font-family:var(--mono);font-size:10.8px;color:var(--muted)}
+.intent{font:10.5px var(--mono);padding:2px 6px;border-radius:4px;border:1px solid transparent}
+.intent.query{color:var(--primary);background:var(--primary-soft);border-color:var(--primary-line)}
+.intent.meta{color:#7c3aed;background:rgba(124,58,237,.06);border-color:rgba(124,58,237,.22)}
+.intent.refuse{color:var(--err);background:var(--err-soft);border-color:var(--err-line)}
+.intent.error{color:var(--warn);background:var(--warn-soft);border-color:var(--warn-line)}
+.audit-q{max-width:330px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+@media(max-width:860px){
+  /* 窄屏把侧栏做成抽屉：默认收走，点 ☰ 覆盖出来 */
+  .side{position:fixed;left:0;top:0;bottom:0;z-index:50;width:270px;
+    transform:translateX(-100%);transition:transform .18s ease}
+  body.side-open .side{transform:none}
+  body.side-open .side-mask{display:block;position:fixed;inset:0;
+    background:rgba(24,24,27,.28);z-index:45}
+}
+@media(max-width:760px){
+  header{height:auto;padding:10px 14px;flex-wrap:wrap;gap:10px}
+  .hstat{margin-left:0;width:100%;gap:10px;flex-wrap:wrap}
+  .who{border-left:0;padding-left:0}
+  #messages{padding:20px 16px 4px}
+  .composer{padding:8px 16px 14px}
+  .composer button{right:26px;top:17px}
+  .empty .etitle{font-size:17px}
+  .status-pop{right:8px;width:calc(100% - 16px)}
+}
+</style>
+</head>
+<body>
+<!-- 侧边栏：会话历史。新对话是懒创建——点开不落库，发出第一句才建，
+     否则点十次"新对话"就在库里留十个空壳。 -->
+<aside class="side" id="side">
+  <div class="side-head">
+    <button class="new-chat" onclick="newChat()"><span>+</span> 新对话</button>
+  </div>
+  <div class="side-list" id="conv-list"></div>
+  <div class="side-foot"><span id="side-count"></span></div>
+</aside>
+<div class="side-mask" id="side-mask" onclick="toggleSide(false)"></div>
+
+<main id="app">
+<header>
+  <button class="side-btn" id="side-btn" onclick="toggleSide()" title="对话历史">☰</button>
+  <div class="brand">
+    <div class="logo">›</div>
+    <div>Data Agent · 问数
+      <small id="brand-sub">问数据，带上出处与复算 SQL</small></div>
+  </div>
+  <div class="hstat">
+    <span class="pill" id="pill-until"></span>
+    <span class="pill" id="pill-model"></span>
+    <button class="ghost" id="clear-btn" onclick="clearAll()" hidden>清空</button>
+    <button class="ghost" id="status-btn" onclick="toggleStatus()" hidden>状态</button>
+    <div class="who" id="who" hidden>
+      <span id="who-name">—</span>
+      <span class="role" id="who-role"></span>
+      <button class="ghost" onclick="openAudit()">审计</button>
+      <a class="ghost" href="/eval-history" target="_blank" rel="noopener"
+         title="每次评测的分数与答案层覆盖率趋势">评测看板</a>
+      <button class="ghost" onclick="logout()">退出</button>
+    </div>
+  </div>
+  <!-- 技术指标收在这里：主界面只留一句"数据截止"，要查细节再点开 -->
+  <div class="status-pop" id="status-pop" hidden></div>
+</header>
+
+<!-- 登录前的门：没有会话就看不到问数区，避免"页面上有入口但一提交就 401" -->
+<div class="overlay" id="login-layer">
+  <form class="login-card" onsubmit="doLogin(event)">
+    <h1>登录 · Data Agent 问数</h1>
+    <p class="sub">下面是同一个系统的三个岗位。同一条问题，不同岗位能看到的层级与列不同；同一岗位落在不同片区，能看到的行不同。</p>
+    <div class="field">
+      <label for="u">用户名</label>
+      <input id="u" autocomplete="username" placeholder="analyst / engineer / pm" />
+    </div>
+    <div class="field">
+      <label for="p">密码</label>
+      <input id="p" type="password" autocomplete="current-password" placeholder="Demo@2026" />
+    </div>
+    <button class="primary" id="login-btn" type="submit">登录</button>
+    <div class="login-err" id="login-err" hidden></div>
+    <div class="accounts">
+      演示账号（密码均为 Demo@2026）<br>
+      <b>analyst</b> 数据分析师 · 全国　　　<b>analyst_east</b> 数据分析师 · 华东<br>
+      <b>engineer</b> 数据开发工程师 · 全国　<b>pm</b> 数据产品经理 · 全国<br>
+      <span style="opacity:.75">三个岗位全部只读；差异在可见分层、可见列与取数上限</span>
+    </div>
+  </form>
+</div>
+
+<!-- 审计：只读，数据来自 PostgreSQL 的 qa_logs（库层不可变触发器） -->
+<div class="overlay" id="audit-layer" hidden>
+  <div class="audit-wrap">
+    <div class="audit-head">
+      <h2>审计 · 最近问答</h2>
+      <span class="sub" id="audit-scope"></span>
+      <span class="spacer"></span>
+      <button class="ghost" onclick="loadAudit()">刷新</button>
+      <button class="ghost" onclick="closeAudit()">关闭</button>
+    </div>
+    <div class="audit-body">
+      <div class="stats" id="audit-stats"></div>
+      <div class="note info" id="audit-why" style="margin:10px 0 0"></div>
+      <!-- AC-14：看审计这件事本身也被记。这一行就是证据——
+           谁、什么时候、看了几行；下面还有保留期与不可变触发器的状态。 -->
+      <div class="note info" id="audit-access" style="margin:10px 0 0"></div>
+
+      <!-- 模型网关台账（AC-18/22）：审计说的是"谁问了什么"，
+           台账说的是"这次问了花了多少钱、出去过几次"。同一份证据的两端，
+           放在同一屏才对得上账。 -->
+      <div class="sub" style="margin:14px 0 6px">模型网关 · 近 24 小时</div>
+      <div class="stats" id="gw-stats"></div>
+      <div class="note info" id="gw-note" style="margin:10px 0 0"></div>
+
+      <table class="audit">
+        <thead><tr>
+          <th>时间</th><th>用户 / 角色</th><th>意图</th><th>问题</th>
+          <th>PII</th><th>表</th><th>行数</th><th>耗时</th><th>trace_id</th>
+        </tr></thead>
+        <tbody id="audit-rows"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+  <div id="messages">
+    <div class="empty" id="empty"></div>
+  </div>
+  <div class="composer">
+    <input id="q" placeholder="问一个业务问题，例如：2026-11-08 的 DAU 是多少" autocomplete="off" />
+    <button id="send" onclick="send()">发送</button>
+  </div>
+</main>
+
+<script>
+const QUICK = [
+  ["你能做什么",""],
+  ["2026-11-08 的 DAU 是多少",""],
+  ["最近7天的播放量",""],
+  ["上个月各省份的活跃用户数",""],
+  ["11-08 各省份活跃用户数",""],
+  ["11-08 收入金额",""],
+  ["今天 DAU 多少","refuse"],
+  ["2026-12-01 的播放量","refuse"]
+];
+const $ = s => document.querySelector(s);
+// 数据范围的显示名。新增片区时在这里补一行即可，权限本身由后端 scope_policies 决定。
+const REGION_CN = { all: "全国", east: "华东" };
+let busy = false;
+
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function fmt(v){
+  if(v===null||v===undefined) return "NULL";
+  if(typeof v==="number") return Number.isInteger(v)?v.toLocaleString("zh-CN"):String(+v.toFixed(4));
+  return esc(v);
+}
+/* 空态：一句标题、一句说明、几个示例问题。
+   示例问题挂在空态里而不是常驻工具条——问过一轮之后它们就没用了，
+   留着只占地方。 */
+function emptyHTML(){
+  const chips = QUICK.map(([q,c])=>
+    `<button class="chip ${c}" onclick="ask('${esc(q)}')">${esc(q)}</button>`).join("");
+  return `<div class="empty" id="empty">
+    <div class="etitle">问一个业务问题</div>
+    <div class="esub">回答会带上<b>时间窗口、数据源、命中口径</b>和可复算的 SQL<br>
+      需要排查时，答案下方能展开「执行过程」</div>
+    <div class="quick">${chips}</div>
+  </div>`;
+}
+function init(){
+  $("#empty") && ($("#empty").outerHTML = emptyHTML());
+  fetch("/api/meta").then(r=>r.json()).then(m=>{
+    document.getElementById("pill-until").innerHTML =
+      `<i class="dot"></i>数据截止 ${esc(m.data_until)}`;
+    document.getElementById("pill-model").innerHTML =
+      `<i class="dot amber"></i>${esc(m.model)}`;
+    STATUS.catalog = `${m.catalog}.${m.database}`;
+    STATUS.guards = m.guards;
+    renderStatus();
+  }).catch(()=>{});
+  $("#q").addEventListener("keydown",e=>{if(e.key==="Enter"&&!busy) send()});
+  try{ if(localStorage.getItem("da-side")==="off") document.body.classList.add("side-hidden") }catch(e){}
+  document.addEventListener("click",e=>{
+    const pop=$("#status-pop");
+    if(pop && !pop.hidden && !e.target.closest("#status-pop") && !e.target.closest("#status-btn"))
+      pop.hidden = true;
+  });
+}
+/* 技术指标（缓存后端、网关开销、出网拦截）不该摆在主界面上，
+   但也不能消失：收进一个可以点开的小浮层。 */
+const STATUS = {catalog:"", guards:"", cache:null, gw:null};
+function toggleStatus(){
+  const pop=$("#status-pop");
+  pop.hidden = !pop.hidden;
+  if(!pop.hidden){ refreshCacheStatus(); refreshGatewayStatus(); }
+}
+function srow(k,v,cls){
+  return `<div class="srow"><span class="k">${esc(k)}</span>
+    <span class="v"><i class="dot ${cls||"gray"}" style="display:inline-block;margin-right:5px"></i>${v}</span></div>`;
+}
+function renderStatus(){
+  const pop=$("#status-pop"); if(!pop || pop.hidden) return;
+  const c=STATUS.cache, g=STATUS.gw, eg=(g&&g.egress)||{};
+  let h="";
+  if(STATUS.catalog) h+=srow("数据源", esc(STATUS.catalog), "blue");
+  if(STATUS.guards) h+=srow("护栏", `${esc(STATUS.guards)} 条`, "ok");
+  if(c){
+    h+=`<div class="sep"></div>`;
+    h+= c.degraded
+      ? srow("缓存", `已降级 · ${esc(c.backend||"local")}`, "red")
+      : srow("缓存", `${esc(c.backend)} · 命中 ${c.hit_rate==null?0:c.hit_rate}%`, "ok");
+  }
+  if(g){
+    const t=(g.ledger&&g.ledger.total)||{};
+    h+=`<div class="sep"></div>`;
+    h+= srow("模型调用", `${t.calls||0} 次 · ¥${(t.cost_cny||0).toFixed(4)}`, "blue");
+    h+= srow("出网", eg.blocked>0 ? `拦截 ${eg.blocked} 次` : `${(eg.allow_hosts||[]).join("、")||"—"}`,
+             eg.blocked>0 ? "red" : "gray");
+  }
+  pop.innerHTML = h || `<div class="srow"><span class="k">状态</span><span class="v">加载中…</span></div>`;
+}
+
+/* ---------------- 身份 ---------------- */
+let ME = null;
+function showLogin(msg){
+  $("#login-layer").hidden = false;
+  $("#who").hidden = true;
+  const e=$("#login-err");
+  if(msg){e.textContent=msg;e.hidden=false}else{e.hidden=true}
+  setTimeout(()=>$("#u").focus(),60);
+}
+function hideLogin(){
+  $("#login-layer").hidden = true;
+  $("#who").hidden = false;
+}
+function boot(){
+  init();
+  fetch("/api/me").then(r=>{
+    if(r.status===401){ showLogin(""); return null }
+    return r.json();
+  }).then(d=>{
+    if(!d) return;
+    ME=d;
+    $("#who-name").textContent = d.user.display_name || d.user.username;
+    // 展示"岗位 · 数据范围"，而不是内部角色码——用户看到的词应该和公司里的岗位名一致
+    const scope = d.user.scope_region && d.user.scope_region !== "all"
+      ? (REGION_CN[d.user.scope_region] || d.user.scope_region) : "";
+    $("#who-role").textContent = (d.user.role_name || d.user.role) + (scope ? " · " + scope : "");
+    $("#who-role").title = (d.user.role_description || "") +
+      (d.policy && d.policy.read_only ? "｜只读" : "");
+    hideLogin();
+    $("#status-btn").hidden = false;
+    loadConvs();
+    refreshCacheStatus();
+    refreshGatewayStatus();
+  }).catch(()=>showLogin("无法连接服务，确认 webapp.py 在运行"));
+}
+/* 缓存后端状态：Redis 还是进程内、有没有降级。
+   降级必须在界面上看得见——静默回落 local 时，"以为共享了其实各存一份"
+   在演示里完全看不出来，在生产上就是缓存穿透。
+   只是这个"看得见"放在状态浮层里，不占主界面的位置。 */
+function refreshCacheStatus(){
+  fetch("/api/cache").then(r=>r.ok?r.json():null).then(d=>{
+    if(!d) return;
+    STATUS.cache = d.cache||{};
+    renderStatus();
+  }).catch(()=>{});
+}
+/* 网关：今日调用量与成本，出网被拦时标红。
+   "闸装了但从没拦过"和"闸装了个寂寞"在界面上长得一样，所以这里要显示
+   真实计数——0 就是 0，不去猜。 */
+function refreshGatewayStatus(){
+  fetch("/api/gateway?days=1").then(r=>r.ok?r.json():null).then(d=>{
+    if(!d) return;
+    STATUS.gw = d;
+    renderStatus();
+  }).catch(()=>{});
+}
+/* 审计弹窗里的网关那一块：和上面的问答统计对着看，才能对得上账。 */
+function renderGateway(g, box, note){
+  if(!g||!box){return}
+  const t=(g.ledger&&g.ledger.total)||{}, eg=g.egress||{}, lim=g.limits||{};
+  box.innerHTML = statCard("模型调用",t.calls||0)+statCard("失败",t.failed||0)+
+    statCard("缓存命中",t.cached||0)+
+    statCard("平均延迟",(t.avg_latency_ms||0)+" ms")+
+    statCard("成本",`¥${(t.cost_cny||0).toFixed(4)}`)+
+    statCard("出网拦截",eg.blocked||0);
+  const parts=[];
+  parts.push(eg.installed
+    ? `出网闸已启用，白名单：${(eg.allow_hosts||[]).join("、")||"无"}`
+    : `出网闸未启用${eg.reason?"（"+eg.reason+"）":""}`);
+  if(eg.via_proxy) parts.push(`经代理出网 ${eg.via_proxy} 次`);
+  parts.push(`限流 ${lim.max_calls_per_min?lim.max_calls_per_min+" 次/分":"不限"} · 日预算 ${lim.daily_cost_cny?"¥"+lim.daily_cost_cny:"不限"}`);
+  if(g.ledger&&g.ledger.ok===false) parts.push("台账查询失败："+(g.ledger.error||""));
+  note.textContent = parts.join("　｜　");
+  note.classList.toggle("warn", !!(g.ledger&&g.ledger.ok===false));
+}
+function doLogin(ev){
+  ev.preventDefault();
+  const btn=$("#login-btn"), err=$("#login-err");
+  const username=$("#u").value.trim(), password=$("#p").value;
+  if(!username||!password){err.textContent="用户名和密码都要填";err.hidden=false;return}
+  btn.disabled=true; err.hidden=true;
+  fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({username,password})})
+    .then(async r=>{
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error(d.detail||d.error||("登录失败 "+r.status));
+      return d;
+    })
+    .then(()=>{ $("#p").value=""; boot(); })
+    .catch(e=>{err.textContent=e.message;err.hidden=false})
+    .finally(()=>{btn.disabled=false});
+}
+function logout(){
+  fetch("/api/logout",{method:"POST"}).then(()=>{
+    ME=null;
+    CUR=null; CONVS=[]; renderConvs();
+    $("#messages").innerHTML = emptyHTML();
+    $("#clear-btn").hidden = true;
+    showLogin("");
+  });
+}
+
+/* ---------------- 审计 ---------------- */
+function openAudit(){
+  $("#audit-layer").hidden=false;
+  loadAudit();
+}
+function closeAudit(){ $("#audit-layer").hidden=true }
+function loadAudit(){
+  $("#audit-rows").innerHTML=`<tr><td colspan="9" style="color:var(--faint)">加载中…</td></tr>`;
+  Promise.all([
+    fetch("/api/audit?limit=50").then(r=>r.json()),
+    // 403 也要取回 body：{detail:"无权限查看全局统计"} 是给用户看的说明，
+    // 若按 r.ok 丢掉，普通岗位看到的就是一块静默空白。
+    fetch("/api/stats?days=1").then(r=>r.json().catch(()=>null)).catch(()=>null),
+    fetch("/api/gateway?days=1").then(r=>r.ok?r.json():null).catch(()=>null),
+    fetch("/api/audit/access?limit=5").then(r=>r.ok?r.json():null).catch(()=>null),
+    fetch("/api/audit/retention").then(r=>r.ok?r.json():null).catch(()=>null)
+  ]).then(([a,s,g,acc,ret])=>{
+    $("#audit-scope").textContent = a.scope==="all"
+      ? "范围：全租户（分析师权限）" : "范围：仅本人记录";
+    // detail 是"无权限查看全局统计"这类说明，不是统计数据：
+    // 不挡掉的话上面会渲染出一排键全是空值的统计卡。
+    if(s && !s.error && !s.detail){
+      // 成本与 P95 是阶段 2 才真正有数的：tokens 之前恒为 0，
+      // 因为审计侧在 trace.data 里找的键名和生成节点写的对不上。
+      const cost = (s.cost_cny||0).toFixed(4);
+      const per = (s.cost_per_query||0).toFixed(4);
+      $("#audit-stats").innerHTML =
+        statCard("近 24h 问答",s.total)+statCard("成功率",(s.success_rate||0)+"%" )+
+        statCard("拒答",s.refused)+statCard("P95 耗时",(s.p95_ms||0)+" ms")+
+        statCard("tokens",((s.tokens_in||0)+(s.tokens_out||0)).toLocaleString())+
+        statCard("成本",`¥${cost}（¥${per}/次）`);
+      const tops = s.top_refusals||[];
+      const whyEl = $("#audit-why");
+      if (tops.length) {
+        whyEl.innerHTML = "主要拒答原因：" + tops.map(t=>
+          `${esc((t.reason||"").replace(/\s+/g," ").slice(0,26))} ×${t.n}`).join("　｜　");
+        whyEl.hidden = false;
+      } else {
+        // 没有拒答时不能留一条空壳提示条：空 note 也占一行，看着像渲染坏了。
+        whyEl.innerHTML = ""; whyEl.hidden = true;
+      }
+    } else {
+      // stats 挂了也不能让 audit-why 留一条空壳蓝条（初始 DOM 未 hidden）。
+      $("#audit-why").hidden = true;
+      $("#audit-stats").innerHTML = s&&s.detail
+        ? `<div class="note info" style="margin:0">${esc(s.detail)}</div>` : "";
+    }
+    renderGateway(g, $("#gw-stats"), $("#gw-note"));
+
+    // AC-14：这次查询本身有没有被记上 + 谁看过审计 + 保留期状态。
+    // 记失败时明确写出来：静默失败等于"以为记了"。
+    const accRows = (acc && acc.rows) || [];
+    const rt = ret && ret.plan;
+    const bits = [];
+    if (a.access_logged === false) {
+      bits.push(`<span style="color:var(--err)">本次访问未能写入审计访问表：`
+        + `${esc(a.access_error || "未知原因")}</span>`);
+    }
+    bits.push(accRows.length
+      ? "最近查看审计：" + accRows.map(x =>
+          `${esc((x.occurred_at || "").replace("T", " ").slice(5, 16))} `
+          + `${esc(x.user_id)}（${esc(x.action)}${x.rows ? " " + x.rows + " 行" : ""}）`
+        ).join("　｜　")
+      : "还没有其他查看记录。");
+    if (rt) {
+      bits.push(`保留期 ${ret.days} 天：当前将归档 ${rt.rows || 0} 行；`
+        + `不可变触发器${ret.trigger_enabled ? "在岗" : "<span style=\"color:var(--err)\">已关闭（异常）</span>"}`);
+    }
+    $("#audit-access").innerHTML = bits.join("<br>");
+    const rows=a.rows||[];
+    if(!rows.length){
+      $("#audit-rows").innerHTML=`<tr><td colspan="9" style="color:var(--faint)">还没有审计记录。</td></tr>`;
+      return;
+    }
+    $("#audit-rows").innerHTML = rows.map(r=>{
+      const t=(r.occurred_at||"").replace("T"," ").slice(0,19);
+      const tabs=(r.tables||[]).join("、");
+      return `<tr>
+        <td class="mono">${esc(t)}</td>
+        <td>${esc(r.user_id||"—")}<br><span class="mono">${esc(r.role||"")}</span></td>
+        <td><span class="intent ${esc(r.intent)}">${esc(r.intent)}</span></td>
+        <td class="audit-q" title="${esc(r.question||"")}">${esc(r.question||"")}</td>
+        <td>${r.pii_hits
+          ? `<span style="font-size:11px;color:var(--warn)">脱敏 ${r.pii_hits} 处</span>`
+          : "—"}</td>
+        <td class="mono">${esc(tabs||"—")}</td>
+        <td>${r.row_count||0}</td>
+        <td class="mono">${r.elapsed_ms||0} ms</td>
+        <td class="mono">${esc((r.trace_id||"").slice(-13))}</td>
+      </tr>`;
+    }).join("");
+  }).catch(e=>{
+    $("#audit-rows").innerHTML=`<tr><td colspan="9" style="color:var(--err)">读取失败：${esc(e.message)}</td></tr>`;
+  });
+}
+function statCard(k,v){return `<div class="stat"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div></div>`}
+
+function ask(q){$("#q").value=q;send()}
+function clearAll(){ newChat() }
+
+/* ---------------- 会话历史 ---------------- */
+let CUR = null;          // 当前会话 id；null = 还没发过言的新对话
+let CONVS = [];          // 侧栏列表
+
+function relTime(iso){
+  if(!iso) return "";
+  const d = new Date(iso), now = new Date();
+  const diff = (now - d) / 1000;
+  if(diff < 60) return "刚刚";
+  if(diff < 3600) return Math.floor(diff/60) + " 分钟前";
+  if(d.toDateString() === now.toDateString()) return d.toTimeString().slice(0,5);
+  const y = new Date(now); y.setDate(now.getDate()-1);
+  if(d.toDateString() === y.toDateString()) return "昨天";
+  return (d.getMonth()+1) + "-" + String(d.getDate()).padStart(2,"0");
+}
+function toggleSide(force){
+  // 宽屏是整条收起，窄屏是从左侧滑出——两种模式共用同一个按钮
+  if(innerWidth <= 860){
+    const open = force===undefined ? !document.body.classList.contains("side-open") : force;
+    document.body.classList.toggle("side-open", open);
+  }else{
+    const show = force===undefined ? document.body.classList.contains("side-hidden") : force;
+    document.body.classList.toggle("side-hidden", !show);
+    try{localStorage.setItem("da-side", show ? "on" : "off")}catch(e){}
+  }
+}
+function loadConvs(){
+  fetch("/api/conversations").then(r=>r.ok?r.json():null).then(d=>{
+    if(!d) return;
+    CONVS = d.rows || [];
+    renderConvs();
+  }).catch(()=>{});
+}
+function renderConvs(){
+  const box = $("#conv-list");
+  if(!box) return;
+  if(!CONVS.length){
+    box.innerHTML = `<div class="conv-empty">还没有对话<br>问一句就会在这里留一条</div>`;
+    $("#side-count").textContent = "";
+    return;
+  }
+  box.innerHTML = CONVS.map(c=>{
+    const t = esc(c.title || "新对话");
+    return `<div class="conv ${c.conv_id===CUR?"active":""}" onclick="openConv('${c.conv_id}')">
+      <div class="ct" title="${t}">${t}</div>
+      <div class="cm">${relTime(c.updated_at)} · ${c.msg_count} 条</div>
+      <button class="cdel" title="删除这段对话（审计记录不受影响）"
+        onclick="event.stopPropagation();delConv('${c.conv_id}')">×</button>
+    </div>`;
+  }).join("");
+  $("#side-count").textContent = `${CONVS.length} 段对话`;
+}
+function newChat(){
+  CUR = null;
+  $("#clear-btn").hidden = true;
+  $("#messages").innerHTML = emptyHTML();
+  renderConvs();
+  if(innerWidth <= 860) toggleSide(false);
+  $("#q").focus();
+}
+function openConv(id){
+  if(busy || id === CUR) { if(innerWidth<=860) toggleSide(false); return }
+  fetch(`/api/conversations/${id}`).then(r=>{
+    if(!r.ok) throw new Error("这段对话不存在或已删除");
+    return r.json();
+  }).then(d=>{
+    CUR = id;
+    renderConvs();
+    const turns = d.turns || [];
+    if(!turns.length){ $("#messages").innerHTML = emptyHTML(); return }
+    $("#messages").innerHTML = turns.map(t=>`
+      <div class="msg">
+        <div class="q"><div class="avatar">Q</div><div class="txt">${esc(t.question)}</div></div>
+        ${t.answer ? renderAnswer(t.answer) : `<div class="note">这一轮没有生成答案。</div>`}
+      </div>`).join("");
+    $("#clear-btn").hidden = false;
+    $("#messages").scrollTop = $("#messages").scrollHeight;
+    if(innerWidth <= 860) toggleSide(false);
+  }).catch(()=>{ loadConvs(); toast("这段对话已经不存在了"); });
+}
+function delConv(id){
+  if(!confirm("删除这段对话？\n\n只删聊天记录，审计里的问答事件不受影响。")) return;
+  fetch(`/api/conversations/${id}`, {method:"DELETE"}).then(r=>{
+    if(!r.ok) throw new Error("删除失败");
+    if(CUR === id) newChat(); else loadConvs();
+  }).catch(e=>toast(e.message || "删除失败"));
+}
+/* 轻提示：不打断操作，2 秒后自己走 */
+function toast(msg){
+  let el = $("#toast");
+  if(!el){
+    el = document.createElement("div");
+    el.id = "toast";
+    el.style.cssText = "position:fixed;left:50%;bottom:96px;transform:translateX(-50%);"
+      + "background:#18181b;color:#fff;font-size:12.5px;padding:8px 14px;border-radius:7px;"
+      + "z-index:80;box-shadow:0 8px 24px rgba(0,0,0,.18);opacity:0;transition:opacity .15s";
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.style.opacity = "1";
+  clearTimeout(el._t);
+  el._t = setTimeout(()=>{ el.style.opacity = "0" }, 2000);
+}
+function send(){
+  const q=$("#q").value.trim(); if(!q||busy) return;
+  busy=true; $("#send").disabled=true;
+  // 空态连同示例问题一起撤掉，之后整屏只有对话
+  const empty=$("#empty"); if(empty) empty.remove();
+  const box=document.createElement("div"); box.className="msg";
+  box.innerHTML=`<div class="q"><div class="avatar">Q</div><div class="txt">${esc(q)}</div></div>
+    <div id="pending"><div class="thinking"><i class="spin"></i>正在解析时间、检索语义层、生成 SQL…</div></div>`;
+  $("#messages").appendChild(box);
+  $("#clear-btn").hidden = false;
+  $("#pending").scrollIntoView({block:"end"});
+
+  fetch("/api/ask",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({question:q, conversation_id:CUR})})
+    .then(async r=>{
+      const st=await r.json().catch(()=>({}));
+      if(r.status===401){ showLogin("会话已过期，请重新登录"); throw new Error("unauthorized") }
+      if(r.status===429){ throw new Error(st.error||"配额已用尽，请稍后再试") }
+      if(!r.ok) throw new Error(st.detail||st.error||("请求失败 "+r.status));
+      return st;
+    }).then(st=>{
+      // 首轮由服务端建会话并回传 id，之后这个 id 就是"接着聊"的依据
+      if(st.conversation_id && !CUR) CUR = st.conversation_id;
+      const p=$("#pending"); if(p) p.outerHTML = renderAnswer(st);
+      $("#messages").scrollTop=$("#messages").scrollHeight;
+      loadConvs();
+      if(st.conv_error) toast("回答已生成，但这轮没存进历史：" + st.conv_error);
+    })
+    .catch(e=>{ const p=$("#pending"); if(p) p.outerHTML=
+      `<div class="note err">${e.message==="unauthorized"?"请先登录。":"请求失败："+esc(e.message)}<br>确认 webapp.py 还在运行、端口没被占用。</div>`; })
+    .finally(()=>{busy=false;$("#send").disabled=false;$("#q").focus()});
+}
+
+function renderAnswer(st){
+  if(st.error) return `<div class="note err">服务异常：${esc(st.error)}</div>`;
+  if(st.meta_answer) return renderMetaAnswer(st);
+  const w=st.time_window||{}, res=st.result||{}, refused=!!st.refused;
+  if(refused){
+    return `<div class="card"><div class="card-top"><h2>答不了这个问题</h2>
+      <span class="tag err">已拒答</span></div><div class="card-body">
+      <div class="note err">${esc(st.refuse_reason||"")}</div>
+      <div class="meta"><div><b>数据范围</b>${esc(w.label||"—")}</div>
+      <div><b>新鲜度</b>${esc(st.freshness||"—")}</div></div>
+      ${rawBlock(st.answer)}${foldTrace(st)}</div></div>`;
+  }
+  if(res.error) return `<div class="note err">查询执行失败：${esc(res.error)}</div>`;
+
+  const cols=res.columns||[], rows=res.rows||[];
+  const title=cover(st), metric=(st.metrics||[])[0]||"问数";
+  let hero="";
+  if(rows.length===1&&cols.length){
+    hero=`<div class="hero">`+cols.map((c,i)=>
+      `<div class="hero-item"><span class="k">${esc(c)}</span><div class="v">${fmt(rows[0][i])}</div></div>`).join("")+`</div>`;
+  }
+  let table="";
+  if(rows.length>1&&cols.length){
+    table=`<div class="table-wrap"><table><thead><tr>${cols.map(c=>`<th>${esc(c)}</th>`).join("")}</tr></thead>
+      <tbody>${rows.slice(0,20).map(r=>`<tr>${cols.map((_,i)=>`<td>${fmt(r[i])}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
+      ${rows.length>20?`<div class="note info">只显示前 20 行，共 ${rows.length} 行；完整结果见复算 SQL。</div>`:""}`;
+  }
+  const notes=[];
+  if(w.note) notes.push(`<div class="note warn">${esc(w.note)}</div>`);
+  for(const c of (st.dimension_cautions||[]).slice(0,2))
+    notes.push(`<div class="note warn">维度提示：${esc(c)}</div>`);
+  const warns=(st.findings||[]).filter(f=>f.level==="WARN");
+  for(const f of warns.slice(0,2)) notes.push(`<div class="note warn">${esc(f.message)}</div>`);
+
+  const srcTables=tablesFromSql(st.sql||"");
+  // 阶段 3：答案形态是"我理解你在问什么"的显式声明。
+  // 用户看到「榜单/TopN」就知道系统没有把排行榜当成一个总量来答；
+  // 返工过的会多一个标记，这比在日志里埋一行更可信。
+  const shp=st.shape||{};
+  const shapeTag=shp.label?`<span class="tag">${esc(shp.label)}</span>`:"";
+  const shapeMeta=shp.label?`<div><b>答案形态</b>${esc(shp.label)}${(st.shape_retries||0)?`　<span style="color:var(--warn)">已返工 ${st.shape_retries} 次</span>`:""}</div>`:"";
+  // 缓存命中要说出来：0 token、0 查询是真的，但"这次没真跑"用户有权知道。
+  const cacheTag=st.cache_hit?`<span class="tag">缓存命中</span>`:"";
+  const cacheMeta=st.cache_hit?`<div><b>缓存</b>命中同一问题（0 token / 0 查询），键 ${esc(st.cache_key||"—")}</div>`:"";
+  const cmp=st.compare_result||{};
+  const cmpMeta=(cmp.status==="ok")?`<div><b>对比基线</b>${esc(cmp.base_label||"")} = ${esc((cmp.base_value??0).toLocaleString())}　差值 ${cmp.delta>0?"+":""}${esc((cmp.delta??0).toLocaleString())}${cmp.pct!=null?`（${cmp.pct>0?"+":""}${(cmp.pct*100).toFixed(2)}%）`:""}</div>`
+    :(cmp.status==="unsafe"?`<div><b>对比基线</b><span style="color:var(--warn)">未计算 —— ${esc(cmp.note||"口径不一致")}</span></div>`:"");
+  // 追问沿用上一轮的指标/时间，必须在元信息里露头：数字是按哪套口径算的，用户有权知道
+  const _fu=st.followup||{};
+  const followMeta=(_fu.metrics||_fu.time)
+    ? `<div><b>追问</b>${_fu.metrics?`指标沿用 ${esc(_fu.metrics.join("、"))}`:""}${
+        _fu.metrics&&_fu.time?"　":""}${
+        _fu.time?`时间沿用 ${esc(_fu.time.start)} ~ ${esc(_fu.time.end)}`:""}</div>` : "";
+  const meta=`<div class="meta">
+    <div><b>时间窗口</b>${esc(cover(st))}　<span style="color:var(--faint)">${esc(w.status||"")}</span></div>
+    ${cmpMeta}${cacheMeta}
+    <div><b>数据源</b>hive_catalog.music_dw · ${esc(srcTables.join("、")||"—")}</div>
+    <div><b>命中指标</b>${esc((st.metrics||[]).join("、")||"按字面口径生成")}</div>
+    ${shapeMeta}
+    <div><b>新鲜度</b>${esc(st.freshness||"—")}</div>
+    ${followMeta}
+    <div><b>护栏</b>${esc(st.verdict||"—")} · ${esc((st.attempts||0)+" 轮")} · ${esc((st.elapsed_ms||0)+" ms")}</div>
+  </div>`;
+  if(st.shape_unresolved && (st.shape_issues||[]).length)
+    notes.push(`<div class="note warn">形态提示：${esc(st.shape_issues[0])}</div>`);
+  return `<div class="card"><div class="card-top">
+      <h2>${esc(title)}</h2><span class="tag ok">${esc(st.verdict||"pass")}</span>
+      <span class="tag">${esc(metric)}</span>${shapeTag}${cacheTag}</div>
+    <div class="card-body">${hero}${table}${notes.join("")}${meta}
+      <div class="section-title">复算 SQL</div>${sqlBox(st.sql||"")}
+      ${rawBlock(st.answer)}${foldTrace(st)}</div></div>`;
+}
+function mdText(s){
+  return esc(s||"").replace(/\*\*(.+?)\*\*/g,"<b>$1</b>")
+                    .replace(/`([^`]+)`/g,"<code>$1</code>");
+}
+function renderMetaAnswer(st){
+  const k=(st.meta_intent||{}).kind||"说明";
+  const label={help:"能力说明",explain:"口径解释",offscope:"通用回答"}[k]||k;
+  return `<div class="card"><div class="card-top"><h2>${esc(label)}</h2>
+    <span class="tag info">未查询数仓</span>
+    <span class="tag">${esc(k)}</span></div>
+    <div class="card-body"><div class="details-meta">${mdText(st.answer||"")}</div>
+    ${foldTrace(st)}</div></div>`;
+}
+function cover(st){
+  const a=st.time_start,b=st.time_end;
+  return a&&b?(a===b?a:`${a} ~ ${b}`):"—";
+}
+function tablesFromSql(sql){
+  const out=[],re=/\b(?:FROM|JOIN)\s+([A-Za-z_][\w.]*)/gi;let m;
+  while((m=re.exec(sql))!==null){
+    const t=m[1].split(".").pop();
+    if(t&&!out.includes(t)) out.push(t);
+  }
+  return out;
+}
+function sqlBox(sql){
+  if(!sql) return `<div class="note info">没有生成 SQL（拒答或直连调试）。</div>`;
+  return `<div class="sqlbox"><div class="bar">SQL · Doris(hive_catalog)
+    <button onclick="cp(this)">复制</button></div><pre>${esc(sql)}</pre></div>`;
+}
+function cp(btn){
+  const t=btn.closest(".sqlbox").querySelector("pre").textContent;
+  navigator.clipboard.writeText(t).then(()=>{btn.textContent="已复制";setTimeout(()=>btn.textContent="复制",1400)});
+}
+function rawBlock(txt){
+  return txt?`<details class="raw"><summary>查看纯文本答案</summary><pre>${esc(txt)}</pre></details>`:"";
+}
+
+/* 执行过程默认不展开。
+   它是有用的证据（护栏拦了什么、SQL 改了几版），但对问数的人只是噪音；
+   所以折在答案卡底部，一句话说明里面有几步，想看再点开。 */
+function foldTrace(st){
+  const steps=st.trace||[];
+  if(!steps.length && !(st.findings||[]).length) return "";
+  const n=steps.length, ms=st.elapsed_ms||0;
+  const sqlN=(st.history||[]).filter(x=>x.sql).length;
+  const bits=[`${n} 步`,`${ms} ms`];
+  if(sqlN) bits.push(`SQL ${sqlN} 版`);
+  const rej=(st.findings||[]).filter(f=>f.level==="REJECT").length;
+  const warn=(st.findings||[]).filter(f=>f.level==="WARN").length;
+  if(rej) bits.push(`拦截 ${rej}`);
+  if(warn) bits.push(`提示 ${warn}`);
+  return `<details class="fold"><summary>执行过程</summary>
+    <div class="fold-body"><span class="hint">${bits.join(" · ")}</span>
+    ${traceHTML(st)}</div></details>`;
+}
+function traceHTML(st){
+  const steps=st.trace||[], findings=st.findings||[], hist=st.history||[], fixes=st.fix_log||[];
+  let h="";
+  // 时间解析摘要
+  const w=st.time_window||{};
+  if(w.label){
+    h+=`<div class="section-title">时间解析</div>
+      <div class="step info"><div class="h"><b>${esc(w.sql_hint||"—")}</b></div>
+      <div class="d">${esc(w.label)}｜状态 ${esc(w.status||"")}${w.requested?`｜原请求 ${esc(w.requested.join(" ~ "))}`:""}</div></div>`;
+  }
+  const mh=(st.metric_hits||[]).map(x=>
+    `<span class="badge ok">${esc(x.matched_by||"")} → ${esc(x.code||"")}</span>`).join("");
+  if((st.dimensions||[]).length || mh){
+    h+=`<div class="section-title">命中维度 / 语义检索</div>
+      <div class="step info">${mh?`<div class="d">${mh}</div>`:""}
+      ${(st.dimensions||[]).length?`<div class="d">维度 ${(st.dimensions||[]).map(x=>`<span class="badge info">${esc(x)}</span>`).join("")}</div>`:""}
+      <div class="d" style="color:var(--faint)">候选表 ${(st.tables||[]).map(esc).join(" · ")||"—"}</div></div>`;
+  }
+  if(steps.length){
+    h+=`<div class="section-title">节点执行（${steps.length}）</div><div class="steps">`;
+    steps.forEach((s,i)=>{
+      const cls=classOf(s.node,s.detail);
+      const data=s.data&&Object.keys(s.data).length
+        ?`<details><summary>展开数据</summary><pre>${esc(JSON.stringify(s.data,null,1))}</pre></details>`:"";
+      h+=`<div class="step ${cls}"><div class="h"><b>${esc(s.node)}</b><span class="n">${i+1}</span></div>
+        <div class="d">${esc(s.detail||"")}</div>${data}</div>`;
+    });
+    h+=`</div>`;
+  }
+  if(findings.length){
+    h+=`<div class="section-title">护栏结果</div><div>`+findings.map(f=>
+      `<span class="badge ${f.level==="REJECT"?"err":f.level==="WARN"?"warn":"info"}">${esc(f.rule)} · ${esc(f.level)}</span>`).join("")+`</div>`;
+  }
+  const sqls=hist.filter(x=>x.sql);
+  if(sqls.length){
+    h+=`<div class="section-title">SQL 演化（${sqls.length} 版）</div>`;
+    sqls.forEach(x=>{h+=`<div class="evol"><div class="eh"><span class="stage">第 ${esc(x.attempt)} 轮 · ${esc(x.stage)}</span>
+      <span>${esc(x.verdict||"")}</span></div><pre>${esc(x.sql)}</pre></div>`});
+  }
+  if(fixes.length){
+    h+=`<div class="section-title">机械修复动作</div>`+fixes.map(f=>`<div class="fixline">${esc(f)}</div>`).join("");
+  }
+  return h;
+}
+function classOf(node,detail){
+  const s=(node+" "+(detail||"")).toLowerCase();
+  if(/reject|拒答|refuse|error|失败/.test(s)) return "err";
+  if(/warn|截断|truncated/.test(s)) return "warn";
+  if(/pass|通过|已包装|ok/.test(s)) return "ok";
+  return "info";
+}
+boot();
+</script>
+</body>
+</html>

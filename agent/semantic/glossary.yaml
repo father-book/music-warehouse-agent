@@ -1,0 +1,248 @@
+# =============================================================================
+# glossary.yaml —— 业务词典 + 口径陷阱清单
+#
+# 两部分：
+#   1. terms  —— 业务方口语 → 标准指标/字段。Agent 做需求澄清时先查这里，
+#                能直接命中就不追问，命中不唯一才问一次。
+#   2. traps  —— 已实测确认的口径陷阱。**每条都有实测数字支撑**，
+#                来源标注为 docs 编号或 2026-11-09 的重跑验证。
+#
+# traps 是这份语义层最有价值的部分：它把「Agent 会踩的坑」从隐性变成显性，
+# 也让答辩时能说清「为什么不能只靠 LLM 直接写 SQL」。
+# =============================================================================
+version: 1
+verified_at: "2026-11-09"
+
+terms:
+
+  # ---- 用户/流量
+  日活: {metric: uv, note: "口径为有 app_launch 的去重用户；ADS 里叫 dau"}
+  DAU: {metric: uv, note: "英文缩写，同『日活』。注意指标码本身叫 uv，不叫 dau；dau 只是 ADS 表的列名"}
+  活跃用户: {metric: uv}
+  用户数: {metric: uv}
+  新增用户: {field: cohort_date, note: "首次活跃日 = cohort_date，新增量按 cohort_size 取"}
+  会员: {field: is_vip, note: "字符串 'true'/'false'"}
+  付费用户: {metric: pay_uv}
+
+  # ---- 播放
+  播放量: {metric: play_start_cnt, note: "业务口语「播放量」通常指起播次数，不是去重歌曲数"}
+  播放次数: {metric: play_start_cnt}
+  # 2026-11-10 补：受限岗位（data_pm）问榜单时模型会自己 FROM dwd_play_start
+  # JOIN dim_song，然后被 R21 拦——而库里本来就有现成的汇总表。
+  # 注意 ads_song_ranking 的 rank_no 是按**完播率**排的（见 tables.yaml caveats），
+  # 拿它当播放量榜会给出完全错误的顺序：实测 2026-11-08 它的第 1 名只有 34 次起播，
+  # 而真实播放量 Top1 是 264 次且根本不在榜上。所以这里只引导到 dws。
+  排行榜: {metric: play_start_cnt, note: "播放量榜要在 dws_song_play_daily 上按 play_start_cnt 排序、歌名 JOIN dim_song；ads_song_ranking 是按完播率排的榜，不能当播放量榜"}
+  榜单: {metric: play_start_cnt, note: "同『排行榜』：dws_song_play_daily 排序 + dim_song 取歌名"}
+  热歌榜: {metric: play_start_cnt, note: "同『排行榜』；若问的是完播率榜才用 ads_song_ranking"}
+  播放量最高: {metric: play_start_cnt, note: "在 dws_song_play_daily 上 ORDER BY play_start_cnt DESC；不要用 ads_song_ranking（完播率排序）"}
+  听歌量: {metric: play_start_cnt}
+  起播: {metric: play_start_cnt}
+  完播: {metric: complete_cnt, note: "play_progress >= 0.9"}
+  完播率: {metric: complete_rate}
+  听完率: {metric: complete_rate}
+  播放进度: {metric: avg_progress, note: "只统计有结束事件的播放，不含跳过"}
+  跳过率: {metric: skip_rate}
+  人均听歌: {metric: avg_play_per_user}
+  # 2026-11-09 E 阶段评测 V17 补：语义层中文名叫「人均起播次数」，
+  # 用户说「人均播放次数」时原来只命中 play_start_cnt，那条写明
+  # 「换成 play_uv 会得到 5.05」的 note 根本没进 prompt，模型就算错了。
+  人均播放次数: {metric: avg_play_per_user}
+  人均起播次数: {metric: avg_play_per_user}
+  # 2026-11-15 C18 修复：语义层原来没有任何「曲目数」指标，问「多少首歌被播放过」
+  # 时 metrics 命中为空，模型只能自己组装——实测 5 次错 4 次，且错法完全一致：
+  # 拿 dws_genre_daily（曲风×天，**没有 song_id**）按 genre 关联 dim_song，
+  # 得 240（全曲库民谣）而不是 237（当日被播放过的）。
+  # 词条必须够长：「首歌」这种短词会把无关问法一起扫进来。
+  播放曲目数: {metric: played_song_cnt}
+  首歌被播放: {metric: played_song_cnt, note: "问的是当日**有播放**的曲目，不是曲库总量；按曲风筛要 JOIN dim_song ON song_id"}
+  多少首歌被播放: {metric: played_song_cnt}
+  被播放过的歌: {metric: played_song_cnt, note: "dim_song 全量民谣 240 首，2026-11-08 被播放的只有 237 首"}
+  曲目数: {metric: played_song_cnt}
+  ARPU: {metric: arpu, note: "人均收入，分母是全量活跃人日（Σ 日 UV）；库里 ads_revenue.arpu / dws_revenue_daily.arpu 实际是 ARPPU，别用"}
+  ARPPU: {metric: arppu}
+
+  # ---- 互动
+  互动: {metric: interact_cnt}
+  互动率: {metric: interact_rate}
+  收藏: {metric: collect_cnt, note: "必须带 action='add'"}
+  点赞: {metric: like_cnt, note: "必须带 action='add'"}
+  分享: {metric: share_cnt}
+  评论: {field: event_name, note: "event_name='comment'，已含在 interact_cnt 里"}
+
+  # ---- 搜索
+  搜索量: {metric: search_cnt}
+  搜索点击率: {metric: search_click_rate}
+  搜不到: {metric: search_zero_cnt, note: "零结果搜索数"}
+  零结果率: {metric: search_zero_rate}
+  无结果率: {metric: search_zero_rate}
+
+  # ---- 商业化
+  收入: {metric: revenue_sum, note: "口径默认是净收入 = 毛收入 - 退款"}
+  销售额: {metric: revenue_sum, note: "「销售额」口语上等同于收入净额；带省份维度时路由到 revenue_sum_province（dev_province_revenue_daily），全国日趋势用 revenue_sum"}
+  流水: {metric: gross_revenue, note: "口语「流水」指毛收入（退款前）。与「收入」（净额）不同，必须区分；2026-11-09 前两者误用同一个指标，导致收入被低估 5.24 倍"}
+  # 2026-11-09 用户前端实测补：「昨天消费最多的用户是谁」被答成
+  # dwd_play_start 的播放次数 TOP1（2,360），护栏 20 条全放行。
+  # 消费 = 用户付出去的钱，不是「内容消费/播放/收听」；取毛额 gross_revenue。
+  消费: {metric: gross_revenue, note: "「消费」= 用户实际支付的金额（毛额/流水），**不是播放、收听、起播次数**；数据在 dwd_pay.amount，禁止去 dwd_play_start 数次数"}
+  消费金额: {metric: gross_revenue}
+  消费最多: {metric: gross_revenue, note: "「消费最多的用户」按用户主体分组 SUM(amount) 降序取 TOP1，来源 dwd_pay；不是播歌最多的用户。用户主体用 COALESCE(NULLIF(user_id,''), device_id)，或显式排除 user_id='' 的匿名记录——不要把匿名支付聚成一个『用户』"}
+  付费金额: {metric: gross_revenue}
+  花了多少钱: {metric: gross_revenue}
+  高消费用户: {metric: gross_revenue}
+  GMV: {metric: gross_revenue, note: "GMV 本质是流水口径，取毛收入；不要映射到净收入 revenue_sum"}
+  付费率: {metric: pay_rate, note: "分子是去重付费用户，不是订单数"}
+  # 2026-11-10 补：评测里「付费用户占比」没命中词条，模型自己拼了个
+  # SUM(pay_cnt)/SUM(dau) 的子查询，算出 0.978（实际 0.286）——不是查不到，
+  # 是**自信地算错**。同一口径的口语说法必须都登记，否则等于给模型留了编造空间。
+  付费用户占比: {metric: pay_rate, note: "同「付费率」：去重付费用户 / DAU"}
+  付费用户比例: {metric: pay_rate}
+  付费渗透率: {metric: pay_rate}
+  付费转化率: {metric: pay_rate, note: "问数语境下沿用 pay_rate；漏斗口径另见 funnel 指标"}
+  退款率: {metric: refund_rate}
+  ARPU: {metric: arpu, trap: arpu_misnamed}
+  人均收入: {metric: arpu, trap: arpu_misnamed}
+  ARPPU: {metric: arppu}
+  付费人均: {metric: arppu}
+  广告点击率: {metric: ad_ctr}
+  千次曝光收入: {metric: ad_ecpm}
+
+  # ---- 转化
+  转化率: {metric: funnel_rate, note: "「转化率」歧义最大，必须问清是哪两层之间"}
+  漏斗: {metric: funnel_rate}
+  点击率: {metric: ctr}
+  留存: {metric: retention_d1, note: "默认次日留存；要 7 日必须显式说 day_n=7"}
+  次日留存: {metric: retention_d1}
+  留存率: {metric: retention_d1}
+
+  # ---- 维度口语
+  省份: {dimension: province}
+  省: {dimension: province}
+  城市: {dimension: city}
+  曲风: {dimension: genre}
+  风格: {dimension: genre}
+  歌曲: {dimension: song_id}
+  歌手: {dimension: singer}
+  平台: {dimension: os}
+  机型系统: {dimension: os}
+  渠道: {dimension: channel}
+  版本: {dimension: app_version}
+  坑位: {dimension: position}
+  推荐位: {dimension: position}
+
+traps:
+
+  - id: arpu_misnamed
+    severity: high
+    field: "ads_revenue.arpu / dws_revenue_daily.arpu"
+    fact: "字段名叫 arpu，DDL 注释也写 ARPU，但实际口径是「净收入 / 付费用户数」，即 ARPPU"
+    evidence: "实测日均值 25.70；823,410 / 32,040 = 25.70（ARPPU），而 823,410 / 113,131 = 7.28（真 ARPU）"
+    action: "算 ARPU 必须自己用 净收入/活跃用户 重算，不许直接取该字段"
+    source: "2026-11-09 重跑实测"
+
+  - id: province_dup
+    severity: low
+    fact: "【已修复，2026-11-09】province 现在是用户级字段，同一用户在所有事件里恒为同一个省市；分省 DAU 之和与全站 DAU **精确相等**"
+    evidence: "全窗口实测：ads_province_dist SUM(dau) = 113,131，ads_daily_overview SUM(dau) = 113,131，差额 0"
+    action: "分省结果可以直接加总当全站值。反过来，「之和 ≠ 全站」是硬 bug 判据——出现差额先查跨省用户与游客分组重复计数"
+    also: "历史：修复前 province 按事件随机，dt=2026-11-08 分省之和 2,144 vs 全站 2,054，差额 90 由 18 个跨省用户贡献；游客空值又在 72 个 (省,市) 组各计 1 次多出 71"
+    source: "2026-11-09 重造后复测"
+
+  - id: session_cnt_two_defs
+    severity: low
+    fact: "【已统一，2026-11-09】「会话数」现在全站只有一个口径：dwd_session 的 app_launch 全量去重，ADS 与明细一致"
+    evidence: "dwd_session 全量 114,450；ads_daily_overview.session_cnt 之和同为 114,450"
+    action: "可以直接交叉校验。历史差异（旧 ADS 只统计有起播的会话 89,189，低 22%）已随口径修复消除"
+    source: "2026-11-09 口径修复后复测"
+
+  - id: complete_rate_denominator
+    severity: high
+    fact: "完播率分母必须是 play_start_cnt，用 play_end_cnt 会系统性高估"
+    evidence: "229,038/445,945 = 51.36%（正确）；229,038/312,083 = 73.39%（错误口径）"
+    action: "看到 70%+ 的完播率先怀疑分母写错"
+    source: "docs/20 §4.1①"
+
+  - id: pay_conv_denominator
+    severity: medium
+    fact: "pay_conv_rate 的分母是实现里的 impression_cnt，不是 docs/20 §5.1 写的 complete_cnt"
+    evidence: "35,566/2,229,725 = 1.595%（实现）；35,566/229,038 = 15.53%（文档口径），相差近 10 倍"
+    action: "以实现为准；若业务方要「完播→付费」转化，必须显式重算，不能取该字段"
+    source: "docs/20 §5.1 与 12_dws_ads_ext.sql 冲突，2026-11-09 确认以实现为准"
+
+  - id: funnel_degenerate
+    severity: medium
+    fact: "漏斗中间两层在数据上完全退化"
+    evidence: "35 天里 ctr 恒为 0.2000、click_to_play_rate 恒为 1.0000；click_cnt 与 play_start_cnt 均为 445,945"
+    action: "不要对这两层做趋势/波动分析，结论会是「零变化」，那是数据生成设定而非业务事实"
+    source: "2026-11-09 重跑实测"
+
+  - id: avg_progress_scope
+    severity: medium
+    fact: "avg_progress 只统计 dwd_play_end，不含 skip"
+    evidence: "dwd_skip 有 133,862 行但没有 play_progress 字段"
+    action: "解读时要说明「有结束事件的播放」而非「全部起播」"
+    source: "docs/20 §4.1③"
+
+  - id: pay_rate_denominator
+    severity: medium
+    fact: "付费率分子是去重付费用户 pay_uv，不是订单数 order_cnt"
+    evidence: "一个用户可多次购买，用订单数当分子付费率会超过 100%"
+    action: "看到付费率 > 100% 立即检查分子"
+    source: "docs/20 §4.1②"
+
+  - id: retention_no_dt
+    severity: medium
+    fact: "ads_user_retention 没有 dt 分区"
+    evidence: "按 dt 过滤报 Invalid table alias or column reference 'dt'；该表 217 行、无分区列"
+    action: "用 cohort_date 过滤，day_n 表示第 N 日"
+    source: "2026-11-09 验证时踩到"
+
+  - id: is_vip_string
+    severity: medium
+    fact: "is_vip / is_login 是字符串 'true'/'false'，不是 BOOLEAN"
+    evidence: "DDL 类型 STRING；写 is_vip = 1 会静默返回空集而不是报错"
+    action: "统一写 is_vip = 'true'"
+    source: "DDL + 08_dws_daily.sql 的 IF(is_login='true',...) 用法"
+
+  - id: rate_avg
+    severity: high
+    fact: "日级比率不可直接 AVG 跨天聚合"
+    evidence: "本例 35 天样本量均衡，重算值与 AVG 恰好都是 0.5136，但这是巧合；docs/16 记录过加权/等权分叉 3.52 个百分点"
+    action: "一律 SUM(分子)/SUM(分母)"
+    source: "docs/20 §1.3、docs/16 §十五"
+
+  - id: timezone_utc
+    severity: high
+    fact: "Hive JVM 时区是 UTC，from_unixtime 返回 UTC 墙上时间；DWD 层已统一外套 from_utc_timestamp 转成上海时间"
+    evidence: "不加转换时离线时间比实时早 8 小时。2026-11-09 已修复 30 处 from_unixtime，修完后 dwd_play_end 的 dt 与 event_ts 跨日记录 0 条"
+    action: "查询 DWD 的 event_ts 时**不要再加 8 小时**（已经是上海时间）；新写 SQL 若出现裸 from_unixtime，必须外套 from_utc_timestamp(...,'Asia/Shanghai')"
+    source: "docs/25 §五、护栏 R13"
+
+  - id: song_id_dual
+    severity: high
+    fact: "song_id 有两套编码（数字 ID 与 MusicBrainz MBID）"
+    evidence: "只按一套 JOIN dim_song，曲风与榜单 100% 落空（11-07/08 实际发生过）"
+    action: "JOIN 必须兼容两套；护栏 R14 强制检查"
+    source: "docs/24、护栏 R14"
+
+  - id: revenue_double_count
+    severity: medium
+    fact: "ads_revenue 里 gross / refund / net 是三个相关字段，cum_net_revenue 是累计值"
+    evidence: "870,335.00 - 46,925.00 = 823,410.00；最后一行的 cum_net_revenue 也等于 823,410.00"
+    action: "三个字段不可相加；求全窗口净收入用 SUM(net_revenue) 或取 cum 的末行，不能两者再相加"
+    source: "2026-11-09 重跑实测"
+
+  - id: dim_much_larger_than_fact
+    severity: low
+    fact: "dim_user 115 万行，但全窗口活跃用户只有 2.3 万"
+    evidence: "ods_user_change 与 dim_user 均 1,150,000 行；35 天去重活跃 23,212、日均 DAU 3,232.3"
+    action: "不要用 dim_user 行数当用户规模指标；活跃口径只认事实表"
+    source: "2026-11-09 重跑实测"
+
+  - id: uv_vs_user_days
+    severity: high
+    fact: "「人」和「人日」是两个量：35 天窗口去重 UV 是 23,212，而逐日 DAU 之和（人日）是 113,131，差 4.87 倍。**count_distinct 指标跨天不能相加**"
+    evidence: "COUNT(DISTINCT 实体) OVER 整个窗口 = 23,212；Σ 每日 COUNT(DISTINCT 实体) = 113,131。同理 35 天去重付费用户 12,371，而付费人日 32,040"
+    action: "问「这段时间有多少用户」→ 用窗口去重重算，绝不能把日值相加；问「日均 DAU」→ 人日/天数。ARPU、ARPPU、人均起播的分母都是**人日**，不是去重人数——用错会虚高 4.87 倍"
+    also: "这条同时是 docs/23 §4.3「count_distinct 是唯一能在这套数据上试出错误的聚合语义」的由来；也是 `uv.baseline` 取 23,212 而不是 113,131 的原因"
+    source: "2026-11-09 口径修复后实测"

@@ -1,0 +1,2341 @@
+{
+ "version": "cal-cb1ec9af",
+ "hash": "cb1ec9af2cd4d48209d950c4f40d7e6686526ac6",
+ "counts": {
+  "metrics": 59,
+  "caliber_rules": 6,
+  "tables": 42,
+  "dimensions": 15,
+  "glossary": 80
+ },
+ "saved_at": "2026-11-15 16:41:39",
+ "payload": {
+  "metrics": {
+   "ad_click_cnt": {
+    "tier": "atomic",
+    "formula": "COUNT(*)",
+    "filter": "event_name = 'ad_click'",
+    "additivity": "full",
+    "source": "dwd_ad"
+   },
+   "ad_ctr": {
+    "tier": "derived",
+    "formula": "ad_click_cnt / ad_impression_cnt",
+    "additivity": "none",
+    "sources": [
+     "dwd_ad"
+    ],
+    "ads": [
+     "ads_revenue",
+     "dws_revenue_daily"
+    ]
+   },
+   "ad_ecpm": {
+    "tier": "typed",
+    "formula": "ad_revenue / ad_impression_cnt * 1000",
+    "trap": "ad_revenue 是按「点击 × 出价」估算的，不是真实竞价，ecpm 只能当量级参考",
+    "additivity": "none",
+    "sources": [
+     "dws_revenue_daily"
+    ]
+   },
+   "ad_impression_cnt": {
+    "tier": "atomic",
+    "formula": "COUNT(*)",
+    "filter": "event_name = 'ad_impression'",
+    "additivity": "full",
+    "source": "dwd_ad"
+   },
+   "arppu": {
+    "tier": "derived",
+    "formula": "revenue_sum / SUM(pay_uv)",
+    "note": "库里字段名叫 arpu 的那个，实际就是本指标。分母同样是**付费人日**（Σ 日付费用户 = 32,040），不是 35 天去重付费用户（12,371）",
+    "additivity": "none",
+    "sources": [
+     "dwd_pay"
+    ],
+    "baseline": 25.7
+   },
+   "arpu": {
+    "tier": "derived",
+    "formula": "revenue_sum / SUM(uv)",
+    "trap": "三个坑叠在一起：①库里的 ads_revenue.arpu / dws_revenue_daily.arpu **不是本指标**，实为 ARPPU（净收入/付费用户数，日均 25.70）；②分母是**人日**（Σ 日 UV = 113,131），不是窗口去重 UV —— 写成 823,410/23,212 会得到 35.47，虚高 4.87 倍；③问「某个时间段的 ARPU」要说明是日均还是周期，两者不同口径",
+    "additivity": "none",
+    "sources": [
+     "dwd_pay",
+     "dwd_session"
+    ],
+    "baseline": 7.28
+   },
+   "avg_play_per_user": {
+    "tier": "derived",
+    "formula": "play_start_cnt / SUM(uv)",
+    "note": "分母是**全量活跃的人日**（app_launch 口径 Σ 日 UV），不是播放用户，也不是窗口去重 UV。若换成 play_uv 会得到 5.05，那是「播放用户人均起播」；若换成 35 天去重 UV（23,212）会得到 19.21，那是「窗口内人均起播」。三者含义完全不同",
+    "additivity": "none",
+    "sources": [
+     "dwd_play_start",
+     "dwd_session"
+    ],
+    "ads": [
+     "ads_daily_overview",
+     "dws_user_daily"
+    ],
+    "baseline": 3.94
+   },
+   "avg_progress": {
+    "tier": "derived",
+    "formula": "AVG(play_progress)",
+    "trap": "只统计 dwd_play_end（播完或中断的那批），**不含 skip**。含义是「有结束事件的人平均听了多少」，不是「所有起播用户平均听了多少」。另：ADS 曾按歌曲等权（AVG(AVG())），2026-11-09 已改为按 play_end_cnt 加权，等权重算会高 0.5~0.6 个百分点",
+    "additivity": "none",
+    "sources": [
+     "dwd_play_end"
+    ],
+    "ads": [
+     "ads_daily_overview",
+     "ads_song_ranking",
+     "dws_song_play_daily"
+    ],
+    "baseline": 0.9328
+   },
+   "avg_session_duration": {
+    "tier": "derived",
+    "formula": "session_duration_sum / session_cnt",
+    "additivity": "none",
+    "sources": [
+     "dwd_session"
+    ]
+   },
+   "click_cnt": {
+    "tier": "atomic",
+    "formula": "COUNT(*)",
+    "additivity": "full",
+    "source": "dwd_click",
+    "baseline": 445945
+   },
+   "collect_cnt": {
+    "tier": "atomic",
+    "formula": "COUNT(*)",
+    "filter": "event_name = 'collect' AND action = 'add'",
+    "trap": "漏掉 action='add' 会把取消收藏一起加进来，净收藏被低估",
+    "additivity": "full",
+    "source": "dwd_interaction"
+   },
+   "collect_rate": {
+    "tier": "derived",
+    "formula": "collect_cnt / play_start_cnt",
+    "additivity": "none",
+    "sources": [
+     "dwd_interaction",
+     "dwd_play_start"
+    ]
+   },
+   "complete_cnt": {
+    "tier": "atomic",
+    "formula": "COUNT(*)",
+    "filter": "play_progress >= 0.9",
+    "additivity": "full",
+    "source": "dwd_play_end",
+    "baseline": 229038
+   },
+   "complete_rate": {
+    "tier": "derived",
+    "formula": "complete_cnt / play_start_cnt",
+    "trap": "分母必须是 play_start_cnt。用 play_end_cnt 当分母会算出 73.39%（229,038/312,083），那是「播完的人里有多少听完」，不是完播率",
+    "additivity": "none",
+    "sources": [
+     "dwd_play_end",
+     "dwd_play_start"
+    ],
+    "ads": [
+     "ads_daily_overview",
+     "ads_song_ranking",
+     "ads_genre_dist",
+     "dws_funnel_daily"
+    ],
+    "baseline": 0.5136
+   },
+   "complete_rate_by_genre": {
+    "tier": "typed",
+    "formula": "complete_rate GROUP BY genre",
+    "additivity": "none",
+    "sources": [
+     "dwd_play_end",
+     "dwd_play_start",
+     "dim_song"
+    ],
+    "ads": [
+     "ads_genre_dist",
+     "dws_genre_daily"
+    ]
+   },
+   "ctr": {
+    "tier": "derived",
+    "formula": "click_cnt / impression_cnt",
+    "trap": "ads_funnel.ctr 在 35 天里**恒为 0.2**（生成器设定），做趋势分析没有信息量，不要当业务结论",
+    "additivity": "none",
+    "sources": [
+     "dwd_click",
+     "dwd_impression"
+    ],
+    "ads": [
+     "ads_funnel",
+     "dws_funnel_daily"
+    ],
+    "baseline": 0.2
+   },
+   "ctr_by_position": {
+    "tier": "typed",
+    "formula": "ctr GROUP BY position",
+    "additivity": "none",
+    "sources": [
+     "dwd_impression",
+     "dwd_click"
+    ]
+   },
+   "funnel_rate": {
+    "tier": "typed",
+    "formula": "click_cnt/impression_cnt ; play_start_cnt/click_cnt ; complete_cnt/play_start_cnt ; interact_cnt/play_start_cnt ; pay_cnt/impression_cnt",
+    "trap": "docs/20 §5.1 定义五层漏斗且付费转化分母为 complete_cnt；实现是六层、分母为 impression_cnt。**以实现为准**，两者相差一个数量级（1.6% vs 15.5%）",
+    "note": "每层分母是上一层分子；但 pay_conv_rate 例外，分母是**曝光**，见下方 trap",
+    "additivity": "none",
+    "sources": [
+     "dws_funnel_daily",
+     "ads_funnel"
+    ],
+    "ads": [
+     "ads_funnel",
+     "dws_funnel_daily"
+    ],
+    "baseline": {
+     "ctr": 0.2,
+     "click_to_play_rate": 1.0,
+     "complete_rate": 0.5136,
+     "interact_rate": 0.7704,
+     "pay_conv_rate": 0.01595
+    }
+   },
+   "gross_revenue": {
+    "tier": "atomic",
+    "formula": "SUM(CASE WHEN event_name IN ('vip_subscribe', 'order_pay') THEN amount ELSE 0 END)",
+    "trap": "「流水」口语常与「收入」混用，本库已拆成两个指标：gross_revenue 含退款前，revenue_sum 是净额。用户说流水取前者，说收入取后者",
+    "additivity": "full",
+    "source": "dwd_pay",
+    "baseline": 870335
+   },
+   "impression_cnt": {
+    "tier": "atomic",
+    "formula": "COUNT(*)",
+    "additivity": "full",
+    "source": "dwd_impression",
+    "baseline": 2229725
+   },
+   "interact_cnt": {
+    "tier": "atomic",
+    "formula": "COUNT(*)",
+    "filter": "event_name IN ('collect','like','share','comment','download','follow_artist','playlist_add')",
+    "trap": "口径分歧（已核对，非 bug）：本指标取**全部**互动事件，**包含** action='remove' 的取消收藏/点赞；而 docs/20 §3.1 主张排除 remove（那样是 254,298，互动率 0.5702 而非 0.7704）。DWS/ADS 的 dws_funnel_daily 实现是 COUNT(*) 无过滤，与 baseline 343,572 一致，所以语义层跟随实现。若要「正向互动率」需另立指标，不要改本指标的分母口径——那会让 ADS 已发布的 35 天数据与报表对不上",
+    "note": "7 类互动事件合计，完整清单见 docs/20 §3.1。2026-11-09 修正事件名：原写 'follow'，库里实际是 follow_artist（follow/unfollow 是 action 列的值，不是事件名），匹配不到会少 13,313 次",
+    "additivity": "full",
+    "source": "dwd_interaction",
+    "baseline": 343572
+   },
+   "interact_rate": {
+    "tier": "derived",
+    "formula": "interact_cnt / play_start_cnt",
+    "additivity": "none",
+    "sources": [
+     "dwd_interaction",
+     "dwd_play_start"
+    ],
+    "baseline": 0.7704
+   },
+   "launch_cnt": {
+    "tier": "atomic",
+    "formula": "COUNT(*)",
+    "filter": "event_name = 'app_launch'",
+    "additivity": "full",
+    "source": "dwd_session"
+   },
+   "like_cnt": {
+    "tier": "atomic",
+    "formula": "COUNT(*)",
+    "filter": "event_name = 'like' AND action = 'add'",
+    "additivity": "full",
+    "source": "dwd_interaction"
+   },
+   "like_rate": {
+    "tier": "derived",
+    "formula": "like_cnt / play_start_cnt",
+    "additivity": "none",
+    "sources": [
+     "dwd_interaction",
+     "dwd_play_start"
+    ]
+   },
+   "order_cnt": {
+    "tier": "atomic",
+    "formula": "COUNT(*)",
+    "filter": "event_name = 'order_pay'",
+    "additivity": "full",
+    "source": "dwd_pay"
+   },
+   "pay_rate": {
+    "tier": "derived",
+    "formula": "pay_uv / uv",
+    "trap": "分子是 **pay_uv**（去重付费用户）不是 order_cnt（订单数）。用订单数当分子，付费率会超过 100%",
+    "additivity": "none",
+    "sources": [
+     "dwd_pay",
+     "dwd_session"
+    ]
+   },
+   "pay_uv": {
+    "tier": "atomic",
+    "formula": "COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id))",
+    "filter": "event_name IN ('vip_subscribe', 'order_pay')",
+    "trap": "生成器里 is_login = uid%10<8，即 20% 用户是永久游客却仍会下单；用裸 COUNT(DISTINCT user_id) 会把这批人全压成 1 个空值（2026-11-09 实测 11-08：1,046 条支付里 207 条无 user_id）。另：ads_revenue.pay_user_cnt 含订阅类支付，口径比 dwd_pay 单事件宽，做趋势必须固定一个来源",
+    "additivity": "semi",
+    "source": "dwd_pay",
+    "baseline": 12371
+   },
+   "play_duration_sum": {
+    "tier": "atomic",
+    "formula": "SUM(play_duration)",
+    "additivity": "full",
+    "source": "dwd_play_end"
+   },
+   "play_end_cnt": {
+    "tier": "atomic",
+    "formula": "COUNT(*)",
+    "note": "含播完与中断，不含跳过",
+    "additivity": "full",
+    "source": "dwd_play_end",
+    "baseline": 312083
+   },
+   "play_error_cnt": {
+    "tier": "atomic",
+    "formula": "COUNT(*)",
+    "filter": "event_name = 'play_error'",
+    "additivity": "full",
+    "source": "dwd_play_control"
+   },
+   "play_error_rate": {
+    "tier": "derived",
+    "formula": "play_error_cnt / play_start_cnt",
+    "additivity": "none",
+    "sources": [
+     "dwd_play_control",
+     "dwd_play_start"
+    ]
+   },
+   "play_start_cnt": {
+    "tier": "atomic",
+    "formula": "COUNT(*)",
+    "additivity": "full",
+    "source": "dwd_play_start",
+    "baseline": 445945
+   },
+   "play_uv": {
+    "tier": "atomic",
+    "formula": "COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id))",
+    "note": "与 uv 同一条实体规则：登录按 user_id、游客按 device_id。**不要写成裸 COUNT(DISTINCT user_id)**——那会把全体游客压成 1 个（35 天实测：正确 20,731，裸 user_id 只剩 16,280，少 21%）。注意本指标只覆盖『有起播的人』，一定小于等于 uv（启动口径），2026-11-09 实测单日 2,525 vs 3,237",
+    "additivity": "semi",
+    "source": "dwd_play_start",
+    "baseline": 20731
+   },
+   "played_song_cnt": {
+    "tier": "atomic",
+    "formula": "COUNT(DISTINCT song_id)",
+    "trap": "「有多少首歌被播放过」问的是**当日有播放的曲目**，不是曲库总量。dim_song 里民谣共 240 首，2026-11-08 被播放过的只有 237 首——直接 COUNT(DISTINCT song_id) FROM dim_song WHERE genre='民谣' 得 240，会多算 3 首没被听过的。更隐蔽的错法：FROM dws_genre_daily g JOIN dim_song s ON s.genre = g.genre——汇总表（曲风×天）与维表用**维度属性**关联，等于把全部 240 首民谣歌都拉进来，结果还是 240；维表必须按主键 song_id 关联。",
+    "note": "当日**真正有播放**的曲目数（dws_song_play_daily 是歌×天粒度，一行一首歌）。要按曲风/歌手筛，JOIN dim_song ON s.song_id = p.song_id 再过滤，因为这张明细只有 song_id，没有 genre 列。",
+    "additivity": "semi",
+    "source": "dws_song_play_daily",
+    "baseline": 1486
+   },
+   "pv": {
+    "tier": "atomic",
+    "formula": "COUNT(*)",
+    "additivity": "full",
+    "source": "dwd_page_view"
+   },
+   "refund_cnt": {
+    "tier": "atomic",
+    "formula": "COUNT(*)",
+    "filter": "event_name = 'order_refund'",
+    "additivity": "full",
+    "source": "dwd_pay"
+   },
+   "refund_rate": {
+    "tier": "derived",
+    "formula": "refund_cnt / order_cnt",
+    "additivity": "none",
+    "sources": [
+     "dwd_pay"
+    ],
+    "ads": [
+     "ads_revenue",
+     "dws_revenue_daily"
+    ],
+    "baseline": 0.0474
+   },
+   "retention_d1": {
+    "tier": "derived",
+    "formula": "次日活跃 ∩ 当日新增 / 当日新增",
+    "additivity": "none",
+    "sources": [
+     "dwd_session",
+     "dim_user"
+    ],
+    "ads": [
+     "ads_user_retention"
+    ],
+    "baseline": 0.5138
+   },
+   "retention_d1_by_cohort": {
+    "tier": "typed",
+    "formula": "retention_rate WHERE day_n = 1 GROUP BY cohort_date",
+    "additivity": "none",
+    "sources": [
+     "ads_user_retention"
+    ],
+    "ads": [
+     "ads_user_retention"
+    ]
+   },
+   "revenue_7d": {
+    "tier": "typed",
+    "formula": "SUM(net_revenue) OVER (ORDER BY dt ROWS BETWEEN 6 PRECEDING AND CURRENT ROW)",
+    "trap": "窗口函数需要 7 天垫底，前 6 天结果不完整，不能当零收入",
+    "additivity": "none",
+    "sources": [
+     "dws_revenue_daily"
+    ]
+   },
+   "revenue_sum": {
+    "tier": "atomic",
+    "formula": "SUM(CASE WHEN event_name IN ('vip_subscribe', 'order_pay') THEN amount WHEN event_name = 'order_refund' THEN -amount ELSE 0 END)",
+    "trap": "2026-11-09 修正：原定义只取 event_name='order_pay'，漏掉 vip_subscribe 的 713,349（占毛收入 82%），算出来 156,986，比真值低 5.24 倍。三个坑叠在一起：① 只取单一 event_name 会丢掉 VIP 订阅；② refund 与收入同表且 amount 为**正数**，必须手工取负；③ 「收入」按 glossary 是净额，不是流水（流水见 gross_revenue）",
+    "additivity": "full",
+    "source": "dwd_pay",
+    "baseline": 823410
+   },
+   "revenue_sum_province": {
+    "tier": "atomic",
+    "formula": "SUM(net_revenue)",
+    "trap": "省×天粒度专用（source 是工程师开发表 dev_province_revenue_daily）；全国日粒度趋势继续用 revenue_sum（dws_revenue_daily / ads_revenue）。两表口径一致，不要跨表混合相加",
+    "additivity": "full",
+    "source": "dev_province_revenue_daily",
+    "baseline": 823410
+   },
+   "search_click_cnt": {
+    "tier": "atomic",
+    "formula": "COUNT(*)",
+    "filter": "event_name = 'search_click'",
+    "additivity": "full",
+    "source": "dwd_search"
+   },
+   "search_click_rate": {
+    "tier": "derived",
+    "formula": "search_click_cnt / search_cnt",
+    "additivity": "none",
+    "sources": [
+     "dwd_search"
+    ],
+    "ads": [
+     "dws_search_daily"
+    ]
+   },
+   "search_cnt": {
+    "tier": "atomic",
+    "formula": "COUNT(*)",
+    "filter": "event_name = 'search'",
+    "additivity": "full",
+    "source": "dwd_search"
+   },
+   "search_zero_cnt": {
+    "tier": "atomic",
+    "formula": "COUNT(*)",
+    "filter": "event_name = 'search' AND result_cnt = 0",
+    "additivity": "full",
+    "source": "dwd_search"
+   },
+   "search_zero_rate": {
+    "tier": "derived",
+    "formula": "search_zero_cnt / search_cnt",
+    "additivity": "none",
+    "sources": [
+     "dwd_search"
+    ],
+    "ads": [
+     "dws_search_daily"
+    ]
+   },
+   "seek_cnt": {
+    "tier": "atomic",
+    "formula": "COUNT(*)",
+    "filter": "event_name = 'seek'",
+    "additivity": "full",
+    "source": "dwd_play_control"
+   },
+   "seek_rate": {
+    "tier": "derived",
+    "formula": "seek_cnt / play_start_cnt",
+    "additivity": "none",
+    "sources": [
+     "dwd_play_control",
+     "dwd_play_start"
+    ]
+   },
+   "session_cnt": {
+    "tier": "atomic",
+    "formula": "COUNT(DISTINCT session_id)",
+    "note": "2026-11-09 起 ads_daily_overview.session_cnt 与本指标同源（app_launch），全量 114,450；旧版 ADS 只统计**有起播的会话**（89,189），低 22%，该差异已消除",
+    "additivity": "full",
+    "source": "dwd_session",
+    "baseline": 114450
+   },
+   "session_duration_sum": {
+    "tier": "atomic",
+    "formula": "SUM(stay_duration)",
+    "filter": "event_name = 'app_exit'",
+    "additivity": "full",
+    "source": "dwd_session"
+   },
+   "share_cnt": {
+    "tier": "atomic",
+    "formula": "COUNT(*)",
+    "filter": "event_name = 'share'",
+    "additivity": "full",
+    "source": "dwd_interaction"
+   },
+   "share_rate": {
+    "tier": "derived",
+    "formula": "share_cnt / play_start_cnt",
+    "additivity": "none",
+    "sources": [
+     "dwd_interaction",
+     "dwd_play_start"
+    ]
+   },
+   "skip_cnt": {
+    "tier": "atomic",
+    "formula": "COUNT(*)",
+    "additivity": "full",
+    "source": "dwd_skip"
+   },
+   "skip_rate": {
+    "tier": "derived",
+    "formula": "skip_cnt / play_start_cnt",
+    "additivity": "none",
+    "sources": [
+     "dwd_skip",
+     "dwd_play_start"
+    ]
+   },
+   "song_rank_daily": {
+    "tier": "typed",
+    "formula": "RANK() OVER (PARTITION BY dt ORDER BY complete_rate DESC)",
+    "trap": "排序键是**完播率**不是播放量；每天取 Top20，全窗口 700 行",
+    "additivity": "none",
+    "sources": [
+     "dwd_play_start",
+     "dim_song"
+    ],
+    "ads": [
+     "ads_song_ranking"
+    ]
+   },
+   "uv": {
+    "tier": "atomic",
+    "formula": "COUNT(DISTINCT COALESCE(NULLIF(user_id, ''), device_id))",
+    "filter": "event_name = 'app_launch'",
+    "note": "「用户为主体、游客按设备补」：登录用户按 user_id 去重，游客按 device_id 去重（命名空间不重叠）。**不能换成 dwd_play_start**：2026-11-09 实测 11-08 启动口径 3,237 人、播放口径 2,525 人，差 22%，差额是启动了但没播的人",
+    "additivity": "semi",
+    "source": "dwd_session",
+    "baseline": 23212
+   },
+   "vip_user_ratio": {
+    "tier": "derived",
+    "formula": "vip_user_cnt / dau",
+    "trap": "2026-11-14 补：分母必须是 **DAU（去重人数）**。写成 dwd_pay 里 is_vip='true' 的行数除以支付行数会算出 99/1,046=0.0946，那是「支付笔数中 VIP 占的比」，不是用户占比。另：dwd_pay 只有付费用户，拿它算全站 VIP 占比分母就只剩 1,046 个付费笔数，口径完全不同",
+    "additivity": "none",
+    "source": "dws_user_daily",
+    "baseline": 0.0979
+   }
+  },
+  "caliber_guard": [
+   {
+    "id": "C1",
+    "kind": "event_coverage",
+    "level": "WARN",
+    "rule": "R25-口径-收入事件",
+    "table": "dwd_pay",
+    "agg_column": "amount",
+    "require_events": [
+     "vip_subscribe",
+     "order_pay"
+    ],
+    "title": "收入金额必须覆盖 VIP 订阅",
+    "why": "35 天里 VIP 订阅 713,349、普通支付 156,986；只取 order_pay 会算出 156,986，比真值 823,410 低 5.24 倍",
+    "hint": "改为 SUM(CASE WHEN event_name IN ('vip_subscribe','order_pay') THEN amount ELSE 0 END)；净收入再按 C2 减退款",
+    "replacement": "SUM(CASE WHEN event_name IN ('vip_subscribe','order_pay') THEN amount ELSE 0 END)"
+   },
+   {
+    "id": "C2",
+    "kind": "refund_sign",
+    "level": "WARN",
+    "rule": "R25-口径-退款符号",
+    "table": "dwd_pay",
+    "agg_column": "amount",
+    "refund_event": "order_refund",
+    "title": "退款必须取负或显式排除",
+    "why": "退款与收入同表且 amount 是正数；按正数相加等于把退款当收入，35 天退款 46,925（占毛收入 5.4%）",
+    "hint": "净额：WHEN event_name = 'order_refund' THEN -amount；流水：显式只保留 vip_subscribe / order_pay",
+    "replacement": "SUM(CASE WHEN event_name IN ('vip_subscribe','order_pay') THEN amount WHEN event_name = 'order_refund' THEN -amount ELSE 0 END)"
+   },
+   {
+    "id": "C3",
+    "kind": "source_guard",
+    "level": "WARN",
+    "rule": "R25-口径-UV 源表",
+    "table": "dwd_play_start",
+    "right_table": "dwd_session",
+    "agg_columns": [
+     "user_id",
+     "device_id"
+    ],
+    "title": "活跃用户必须用启动口径",
+    "why": "2026-11-09 实测 11-08 启动口径 3,237 人、播放口径 2,525 人，差 22%，差额是启动了但没播的人",
+    "hint": "改用 dwd_session（event_name = 'app_launch'）；只算播放用户请另立 play_uv 指标，不要顶替 DAU",
+    "replacement": "dwd_session"
+   },
+   {
+    "id": "C4",
+    "kind": "denominator",
+    "level": "REJECT",
+    "rule": "R25-口径-完播率分母",
+    "table": "dwd_play_end",
+    "right_table": "dwd_play_start",
+    "indicator": "complete_rate",
+    "right_denominator": "play_start_cnt",
+    "title": "完播率分母必须是起播数",
+    "why": "分母用 dwd_play_end 的 COUNT(*)（312,083 行）会算出 0.7341；真值 complete_cnt/play_start_cnt = 229,038/445,945 = 0.5143。promptlib 两条硬提示仍挡不住（2026-11-14 实测 5 次错 1 次）",
+    "hint": "分子分母各自在自己的来源表上独立聚合成标量子查询再相除：分子是 dwd_play_end 里 play_progress>=0.9 的行数，分母是 dwd_play_start 的起播数",
+    "fix_template": "(SELECT COUNT(*) FROM dwd_play_start WHERE dt = '{dt}')"
+   },
+   {
+    "id": "C5",
+    "kind": "dedup_entity",
+    "level": "REJECT",
+    "rule": "R25-口径-用户占比分母",
+    "table": "dwd_pay",
+    "right_table": "dws_user_daily",
+    "indicator": "ratio",
+    "title": "用户占比分母必须是去重人数",
+    "why": "dwd_pay 一行是一笔支付；SUM(is_vip='true')/COUNT(*) = 99/1,046 = 0.0946 是笔数占比，真值 vip_user_cnt/dau = 317/3,237 = 0.0979（2026-11-08）",
+    "hint": "改用 dws_user_daily 的 vip_user_cnt / dau（语义层已有 vip_user_ratio 指标），不要从支付明细按行计数",
+    "replacement": "SELECT vip_user_cnt / NULLIF(dau, 0) AS vip_ratio FROM dws_user_daily WHERE dt = '<当日>'"
+   },
+   {
+    "id": "C6",
+    "kind": "ratio_consistency",
+    "level": "REJECT",
+    "rule": "R25-口径-占比分子分母同源",
+    "table": "ads_province_dist",
+    "tables": [
+     "ads_province_dist",
+     "dws_province_daily"
+    ],
+    "indicator": "ratio",
+    "title": "省份占比的分子分母必须同列同源",
+    "why": "2026-11-15 实测 C15：MAX(province_play)/SUM(play_start_cnt) 分子取自按省聚合子查询、分母另起 CROSS JOIN 取另一层的列，算出 0.0029；真值 MAX(province_play)/SUM(province_play) = 1150/12710 = 0.0905",
+    "hint": "占比的分子与分母用同一列：按省聚合后 MAX(province_play)/SUM(province_play)，或直接在省份表上 MAX(play_start_cnt)/SUM(play_start_cnt)；不要让分子分母各自来自不同的子查询层",
+    "replacement": "SELECT MAX(province_play) / NULLIF(SUM(province_play), 0) AS ratio FROM (SELECT province, SUM(play_start_cnt) AS province_play FROM dws_province_daily WHERE dt = '<当日>' GROUP BY province) t"
+   }
+  ],
+  "tables": {
+   "ads_client_quality_1min": {
+    "grain": "分钟",
+    "columns": [
+     "stat_minute",
+     "play_cnt",
+     "error_cnt",
+     "error_rate",
+     "top_error_code",
+     "top_error_cnt",
+     "updated_at"
+    ],
+    "caveats": [
+     "与 ops_data_quality 的区别：这张看客户端播放错误，那张看埋点规则校验"
+    ],
+    "partitioned_by": [
+     "stat_minute"
+    ],
+    "layer": "rt"
+   },
+   "ads_daily_overview": {
+    "grain": "天",
+    "pk": [
+     "dt"
+    ],
+    "columns": [
+     "dau",
+     "session_cnt",
+     "play_start_cnt",
+     "play_end_cnt",
+     "complete_cnt",
+     "complete_rate",
+     "incomplete_rate",
+     "avg_progress",
+     "avg_play_per_user",
+     "login_user_cnt",
+     "vip_user_cnt",
+     "dt"
+    ],
+    "caveats": [
+     "dau / session_cnt 来自 dws_user_daily，2026-11-09 起口径为「启动过 App 的全量活跃」：dau = COUNT(DISTINCT COALESCE(NULLIF(user_id,''), device_id))，session_cnt = app_launch 的全量会话",
+     "旧版此处是「有起播的用户/会话」，实测低 22%（2,525 vs 3,237 / 2,542 vs 3,270），已废弃",
+     "跨天算完播率必须重算，ROUND 后的比率再 AVG 会有假精度"
+    ],
+    "partitioned_by": [
+     "dt"
+    ],
+    "layer": "ads"
+   },
+   "ads_funnel": {
+    "grain": "天",
+    "pk": [
+     "dt"
+    ],
+    "columns": [
+     "impression_cnt",
+     "click_cnt",
+     "ctr",
+     "play_start_cnt",
+     "click_to_play_rate",
+     "complete_cnt",
+     "complete_rate",
+     "interact_cnt",
+     "interact_rate",
+     "pay_cnt",
+     "pay_conv_rate",
+     "pay_cnt_dod",
+     "dt"
+    ],
+    "caveats": [
+     "pay_cnt 含订阅+下单，不含退款",
+     "pay_cnt_dod 是日环比，第一天为 NULL",
+     "中间两层（ctr / click_to_play_rate）无方差，做趋势分析没有信息量"
+    ],
+    "partitioned_by": [
+     "dt"
+    ],
+    "layer": "ads"
+   },
+   "ads_genre_dist": {
+    "grain": "曲风 × 天",
+    "pk": [
+     "dt",
+     "genre"
+    ],
+    "columns": [
+     "genre",
+     "play_start_cnt",
+     "start_share",
+     "complete_rate",
+     "user_cnt",
+     "dt"
+    ],
+    "caveats": [
+     "start_share 是当日占比，跨天不能直接相加"
+    ],
+    "partitioned_by": [
+     "dt"
+    ],
+    "layer": "ads"
+   },
+   "ads_province_10min": {
+    "grain": "10 分钟 × 省份",
+    "columns": [
+     "window_start",
+     "province",
+     "play_cnt",
+     "uv",
+     "play_share",
+     "updated_at"
+    ],
+    "caveats": [
+     "play_share 是窗口内占比，跨窗口求和没有意义"
+    ],
+    "partitioned_by": [
+     "window_start"
+    ],
+    "layer": "rt"
+   },
+   "ads_province_dist": {
+    "grain": "省 × 天",
+    "pk": [
+     "dt",
+     "province"
+    ],
+    "columns": [
+     "province",
+     "dau",
+     "play_start_cnt",
+     "session_cnt",
+     "dau_share",
+     "dt"
+    ],
+    "caveats": [
+     "1085 = 31 省 × 35 天（比 dws_province_daily 的 78 组合/天少，因为这里只到省）",
+     "dau_share 每日合计 = 1.0；且 SUM(dau) 与全站 dau **精确相等**（2026-11-09 实测 113,131 = 113,131）—— 这是地域口径正确性的硬判据，不相等就一定有 bug",
+     "sum(dau) 曾经比全站多 71（游客在含游客的 (省,市) 组各计 1 次），已由设备实体去重修复"
+    ],
+    "partitioned_by": [
+     "dt"
+    ],
+    "layer": "ads"
+   },
+   "ads_realtime_overview": {
+    "grain": "天",
+    "columns": [
+     "stat_date",
+     "total_play",
+     "total_uv",
+     "login_uv",
+     "finish_rate",
+     "skip_rate",
+     "avg_play_duration",
+     "active_minutes",
+     "last_event_ts",
+     "updated_at"
+    ],
+    "caveats": [
+     "只有 3 天（11-06~11-08）；与离线 ads_daily_overview 口径不同，不要混用",
+     "last_event_ts 是快照里最后一个事件时间，可用来判断链路何时停的"
+    ],
+    "partitioned_by": [
+     "stat_date"
+    ],
+    "layer": "rt"
+   },
+   "ads_revenue": {
+    "grain": "天",
+    "pk": [
+     "dt"
+    ],
+    "columns": [
+     "gross_revenue",
+     "refund_amount",
+     "net_revenue",
+     "ad_revenue",
+     "pay_user_cnt",
+     "arpu",
+     "refund_rate",
+     "ad_ctr",
+     "net_revenue_dod",
+     "cum_net_revenue",
+     "dt"
+    ],
+    "caveats": [
+     "arpu 字段实为 ARPPU，见 glossary.traps.arpu_misnamed",
+     "cum_net_revenue 是累计值，最后一行的值才是全窗口净收入",
+     "net_revenue = gross_revenue - refund_amount，三个字段不要重复相加"
+    ],
+    "partitioned_by": [
+     "dt"
+    ],
+    "layer": "ads"
+   },
+   "ads_session_1min": {
+    "grain": "分钟",
+    "columns": [
+     "stat_minute",
+     "session_cnt",
+     "avg_evts_per_sess",
+     "bounce_sess_cnt",
+     "bounce_rate",
+     "updated_at"
+    ],
+    "caveats": [
+     "这里的 session 是实时链路按 30 分钟不活动切分，与离线 dwd_session 口径不同"
+    ],
+    "partitioned_by": [
+     "stat_minute"
+    ],
+    "layer": "rt"
+   },
+   "ads_song_rank_10min": {
+    "grain": "10 分钟 × 歌曲 × 名次",
+    "columns": [
+     "window_start",
+     "rank_no",
+     "song_id",
+     "play_cnt",
+     "uv",
+     "skip_rate",
+     "updated_at"
+    ],
+    "caveats": [
+     "窗口列是 window_start 不是 stat_minute；一个窗口里每首歌一行",
+     "只能和同窗口的表比名次，不能与离线 ads_song_ranking 直接比"
+    ],
+    "partitioned_by": [
+     "window_start"
+    ],
+    "layer": "rt"
+   },
+   "ads_song_ranking": {
+    "grain": "天 × 名次（每天 20 行）",
+    "pk": [
+     "dt",
+     "rank_no"
+    ],
+    "columns": [
+     "rank_no",
+     "song_id",
+     "song_name",
+     "singer",
+     "genre",
+     "play_start_cnt",
+     "complete_cnt",
+     "complete_rate",
+     "avg_progress",
+     "dt"
+    ],
+    "caveats": [
+     "rank_no 按**完播率**降序，与 play_start_cnt 无关：2026-11-08 榜首仅 34 次起播，播放量 Top1（264 次）不在榜内",
+     "问「播放量最高 / 播放量排行榜」不要用本表，改在 dws_song_play_daily 上 ORDER BY play_start_cnt + JOIN dim_song 取歌名",
+     "700 = 20 名 × 35 天；只能取榜单，SUM(play_start_cnt) 会得到 574 而已，远小于全站 12,710",
+     "rank_no 每天从 1 重排，跨天比名次要用 rank_no，不能用 song_id 排序"
+    ],
+    "not_for": [
+     "播放量",
+     "播放次数",
+     "起播",
+     "听歌量"
+    ],
+    "partitioned_by": [
+     "dt"
+    ],
+    "layer": "ads"
+   },
+   "ads_user_retention": {
+    "grain": "同期群(cohort_date) × 第 N 日(day_n)",
+    "pk": [
+     "cohort_date",
+     "day_n"
+    ],
+    "columns": [
+     "cohort_date",
+     "day_n",
+     "cohort_size",
+     "retained_users",
+     "retention_rate"
+    ],
+    "caveats": [
+     "**没有 dt 分区**，用 cohort_date 过滤；写成 WHERE dt=... 会报 Invalid table alias",
+     "day_n 是「第 N 日」不是日期；day_n=1 才是次日留存",
+     "217 行：D1 有 34 个 cohort，逐天递减到 D7 的 28 个（窗口尾部没有 7 天可观测）",
+     "retention_rate 已是比率，跨 cohort 求平均要按 cohort_size 加权，不能直接 AVG"
+    ],
+    "partitioned_by": [],
+    "layer": "ads"
+   },
+   "dev_province_daily_top20_user": {
+    "grain": "天 × province × user_id",
+    "pk": [
+     "dt",
+     "province",
+     "user_id"
+    ],
+    "columns": [
+     "province",
+     "dt",
+     "user_id",
+     "gross_revenue",
+     "rn"
+    ],
+    "caveats": [
+     "由 Agent ETL 流程生成、etlguard 校验、执行后回读（2026-11-11，17178 行）",
+     "数据窗口 2026-10-05 ~ 2026-11-08；源表更新后由每日调度脚本重刷",
+     "业务口径来源：统计每个省份每日消费金额的top20用户，并且每天要自动更新",
+     "列结构由执行后 DESCRIBE 实测生成；口径若要成为命名指标，需在 metrics.yaml 补指标定义（会进入口径评测）"
+    ],
+    "partitioned_by": [],
+    "layer": "dev"
+   },
+   "dev_province_revenue_daily": {
+    "grain": "省 × 天",
+    "pk": [
+     "dt",
+     "province"
+    ],
+    "columns": [
+     "province",
+     "dt",
+     "pay_order_cnt",
+     "net_revenue"
+    ],
+    "caveats": [
+     "net_revenue 与 revenue_sum 指标口径逐分对齐（含 vip_subscribe、退款取负），35 天合计 823,410 = ads_revenue.net_revenue 合计",
+     "数据截至 2026-11-08；dwd_pay 支付类事件最早出现在 2026-10-05",
+     "由 Agent ETL 流程生成、etlguard 校验、人工复核口径后执行（2026-11-11）；源表更新后需重跑 CTAS 刷新本表"
+    ],
+    "partitioned_by": [],
+    "layer": "dev"
+   },
+   "dim_date": {
+    "grain": "一天一行",
+    "pk": "dt",
+    "columns": [
+     "dt",
+     "day_of_week_num",
+     "day_of_week",
+     "week_of_year",
+     "month",
+     "quarter",
+     "year",
+     "is_weekend"
+    ],
+    "caveats": [
+     "行数只有 35，只覆盖重造窗口；跨窗口分析要按需生成，不能假设日历完整"
+    ],
+    "partitioned_by": [
+     "dt"
+    ],
+    "layer": "dim"
+   },
+   "dim_song": {
+    "grain": "一首歌一行",
+    "pk": "song_id",
+    "columns": [
+     "song_id",
+     "song_name",
+     "singer",
+     "genre",
+     "duration",
+     "release_date",
+     "region"
+    ],
+    "caveats": [
+     "song_id 存在**两套编码**（数字 ID 与 MusicBrainz MBID），JOIN 必须兼容两套，否则曲风/榜单 100% 落空（docs/24、护栏 R14）",
+     "曲风只有 4 类：流行 856 / 摇滚 330 / 民谣 240 / R&B 60"
+    ],
+    "partitioned_by": [],
+    "layer": "dim"
+   },
+   "dim_user": {
+    "grain": "一个用户的一个历史版本一行（SCD2 拉链表，不是一人一行）",
+    "pk": "user_id",
+    "columns": [
+     "user_id",
+     "is_vip",
+     "city",
+     "province",
+     "app_version",
+     "os",
+     "device_model",
+     "register_date",
+     "start_date",
+     "end_date",
+     "is_current",
+     "change_type"
+    ],
+    "caveats": [
+     "**JOIN 必须收敛**：`is_current='Y'` 或 `dt BETWEEN start_date AND end_date`，否则行数膨胀。实测 11-08 `dwd_session JOIN dim_user` 不加收敛得 3,171 行、加了得 2,660 行，虚高 19.2% 且零报错（护栏 R18）",
+     "province 只有 **28** 个取值，而事件表 province 有 **31** 个；按维表关联与按事件字段分组，省份数不同，不要混用",
+     "有 115 万用户，但全窗口活跃用户只有 7.1 万（日均 2,031），维表远大于事实表是正常现象"
+    ],
+    "partitioned_by": [],
+    "layer": "dim"
+   },
+   "dwd_ad": {
+    "grain": "一次广告曝光或点击",
+    "pk": "event_id",
+    "columns": [
+     "event_id",
+     "event_ts",
+     "server_ts",
+     "user_id",
+     "device_id",
+     "is_login",
+     "is_vip",
+     "app_version",
+     "os",
+     "os_version",
+     "device_model",
+     "network",
+     "carrier",
+     "ip",
+     "province",
+     "city",
+     "session_id",
+     "session_seq",
+     "is_foreground",
+     "channel",
+     "page_id",
+     "event_name",
+     "ad_id",
+     "ad_type",
+     "position",
+     "bid_price",
+     "properties_raw",
+     "etl_time",
+     "dt"
+    ],
+    "caveats": [
+     "广告收入是按「点击 × 出价」**估算**的，不是真实竞价结果，不能做真实归因"
+    ],
+    "partitioned_by": [
+     "dt"
+    ],
+    "layer": "dwd"
+   },
+   "dwd_click": {
+    "grain": "一次点击",
+    "pk": "event_id",
+    "columns": [
+     "event_id",
+     "event_ts",
+     "server_ts",
+     "user_id",
+     "device_id",
+     "is_login",
+     "is_vip",
+     "app_version",
+     "os",
+     "os_version",
+     "device_model",
+     "network",
+     "carrier",
+     "ip",
+     "province",
+     "city",
+     "session_id",
+     "session_seq",
+     "is_foreground",
+     "channel",
+     "page_id",
+     "event_name",
+     "song_id",
+     "target_type",
+     "target_id",
+     "position",
+     "page",
+     "is_click",
+     "properties_raw",
+     "etl_time",
+     "dt"
+    ],
+    "caveats": [
+     "点击量与起播量完全相等（445,945），因为生成器让每次点击必然跟一次起播 → click_to_play_rate 恒为 1.0，无区分度"
+    ],
+    "partitioned_by": [
+     "dt"
+    ],
+    "layer": "dwd"
+   },
+   "dwd_impression": {
+    "grain": "一次曝光",
+    "pk": "event_id",
+    "columns": [
+     "event_id",
+     "event_ts",
+     "server_ts",
+     "user_id",
+     "device_id",
+     "is_login",
+     "is_vip",
+     "app_version",
+     "os",
+     "os_version",
+     "device_model",
+     "network",
+     "carrier",
+     "ip",
+     "province",
+     "city",
+     "session_id",
+     "session_seq",
+     "is_foreground",
+     "channel",
+     "page_id",
+     "event_name",
+     "song_id",
+     "position",
+     "scene",
+     "is_click",
+     "properties_raw",
+     "etl_time",
+     "dt"
+    ],
+    "caveats": [
+     "ctr 的分母来源；曝光量是明细层最大的表（223 万行，占全量 45%）"
+    ],
+    "partitioned_by": [
+     "dt"
+    ],
+    "layer": "dwd"
+   },
+   "dwd_interaction": {
+    "grain": "一次互动事件",
+    "pk": "event_id",
+    "columns": [
+     "event_id",
+     "event_ts",
+     "server_ts",
+     "user_id",
+     "device_id",
+     "is_login",
+     "is_vip",
+     "app_version",
+     "os",
+     "os_version",
+     "device_model",
+     "network",
+     "carrier",
+     "ip",
+     "province",
+     "city",
+     "session_id",
+     "session_seq",
+     "is_foreground",
+     "channel",
+     "page_id",
+     "event_name",
+     "song_id",
+     "action",
+     "share_channel",
+     "comment_len",
+     "quality",
+     "artist_id",
+     "playlist_id",
+     "properties_raw",
+     "etl_time",
+     "dt"
+    ],
+    "caveats": [
+     "collect / like 区分 action='add' / 'cancel'，算收藏数必须带 action='add'，否则加减抵消"
+    ],
+    "partitioned_by": [
+     "dt"
+    ],
+    "layer": "dwd"
+   },
+   "dwd_page_view": {
+    "grain": "一次页面浏览",
+    "pk": "event_id",
+    "columns": [
+     "event_id",
+     "event_ts",
+     "server_ts",
+     "user_id",
+     "device_id",
+     "is_login",
+     "is_vip",
+     "app_version",
+     "os",
+     "os_version",
+     "device_model",
+     "network",
+     "carrier",
+     "ip",
+     "province",
+     "city",
+     "session_id",
+     "session_seq",
+     "is_foreground",
+     "channel",
+     "page_id",
+     "event_name",
+     "page",
+     "from_page",
+     "stay_duration",
+     "properties_raw",
+     "etl_time",
+     "dt"
+    ],
+    "caveats": [],
+    "partitioned_by": [
+     "dt"
+    ],
+    "layer": "dwd"
+   },
+   "dwd_pay": {
+    "grain": "一笔订单事件（支付或退款）",
+    "pk": "event_id",
+    "columns": [
+     "event_id",
+     "event_ts",
+     "server_ts",
+     "user_id",
+     "device_id",
+     "is_login",
+     "is_vip",
+     "app_version",
+     "os",
+     "os_version",
+     "device_model",
+     "network",
+     "carrier",
+     "ip",
+     "province",
+     "city",
+     "session_id",
+     "session_seq",
+     "is_foreground",
+     "channel",
+     "page_id",
+     "event_name",
+     "sku_id",
+     "amount",
+     "pay_channel",
+     "order_id",
+     "reason",
+     "properties_raw",
+     "etl_time",
+     "dt"
+    ],
+    "caveats": [
+     "order_pay 与 order_refund 同表混存：算收入必须显式区分事件——净收入 = vip_subscribe + order_pay 减退款（订单/退款都别忘了，只取 order_pay 会漏掉占 82% 的 VIP 订阅，2026-11-09 实测低 5.24 倍）",
+     "amount 是 DECIMAL(18,2)，不要转 DOUBLE 求和"
+    ],
+    "partitioned_by": [
+     "dt"
+    ],
+    "layer": "dwd"
+   },
+   "dwd_play_control": {
+    "grain": "一次控制事件（seek / play_error / pause / resume）",
+    "pk": "event_id",
+    "columns": [
+     "event_id",
+     "event_ts",
+     "server_ts",
+     "user_id",
+     "device_id",
+     "is_login",
+     "is_vip",
+     "app_version",
+     "os",
+     "os_version",
+     "device_model",
+     "network",
+     "carrier",
+     "ip",
+     "province",
+     "city",
+     "session_id",
+     "session_seq",
+     "is_foreground",
+     "channel",
+     "page_id",
+     "event_name",
+     "song_id",
+     "position",
+     "from_pos",
+     "to_pos",
+     "direction",
+     "pause_duration",
+     "error_type",
+     "properties_raw",
+     "etl_time",
+     "dt"
+    ],
+    "caveats": [
+     "一张表混了多种 event_name，取 seek_cnt / play_error_cnt 必须带 event_name 过滤"
+    ],
+    "partitioned_by": [
+     "dt"
+    ],
+    "layer": "dwd"
+   },
+   "dwd_play_end": {
+    "grain": "一次播放结束（播完或中断）",
+    "pk": "event_id",
+    "columns": [
+     "event_id",
+     "event_ts",
+     "server_ts",
+     "user_id",
+     "device_id",
+     "is_login",
+     "is_vip",
+     "app_version",
+     "os",
+     "os_version",
+     "device_model",
+     "network",
+     "carrier",
+     "ip",
+     "province",
+     "city",
+     "session_id",
+     "session_seq",
+     "is_foreground",
+     "channel",
+     "page_id",
+     "song_id",
+     "song_duration",
+     "play_duration",
+     "play_progress",
+     "end_reason",
+     "etl_time",
+     "dt"
+    ],
+    "caveats": [
+     "**不含跳过**（skip 事件不产生 play_end），所以 end < start 是正常的",
+     "play_progress >= 0.9 才算完播；avg_progress 的含义是「播完的那批人平均听了多少」"
+    ],
+    "partitioned_by": [
+     "dt"
+    ],
+    "layer": "dwd"
+   },
+   "dwd_play_start": {
+    "grain": "一次起播",
+    "pk": "event_id",
+    "columns": [
+     "event_id",
+     "event_ts",
+     "server_ts",
+     "user_id",
+     "device_id",
+     "is_login",
+     "is_vip",
+     "app_version",
+     "os",
+     "os_version",
+     "device_model",
+     "network",
+     "carrier",
+     "ip",
+     "province",
+     "city",
+     "session_id",
+     "session_seq",
+     "is_foreground",
+     "channel",
+     "page_id",
+     "song_id",
+     "playlist_id",
+     "quality",
+     "play_mode",
+     "song_index",
+     "etl_time",
+     "dt"
+    ],
+    "caveats": [
+     "是**起播**不是播放会话，同一会话可多次起播",
+     "完播率的分母只能用本表，不能用 dwd_play_end（会抬到 73%）"
+    ],
+    "partitioned_by": [
+     "dt"
+    ],
+    "layer": "dwd"
+   },
+   "dwd_quality_error": {
+    "grain": "每条异常事件",
+    "columns": [
+     "event_id",
+     "rule_name",
+     "event_name",
+     "rule_level",
+     "detail",
+     "song_id",
+     "user_id",
+     "device_id",
+     "event_ts",
+     "raw_properties",
+     "etl_time",
+     "dt"
+    ],
+    "caveats": [
+     "异常明细含 user_id/device_id，产品经理角色会被列级策略拦下（不是 bug）",
+     "rule_name 对应实时校验规则；按规则聚合能看出哪种异常最多"
+    ],
+    "partitioned_by": [
+     "dt"
+    ],
+    "layer": "rt"
+   },
+   "dwd_search": {
+    "grain": "一次搜索或搜索点击",
+    "pk": "event_id",
+    "columns": [
+     "event_id",
+     "event_ts",
+     "server_ts",
+     "user_id",
+     "device_id",
+     "is_login",
+     "is_vip",
+     "app_version",
+     "os",
+     "os_version",
+     "device_model",
+     "network",
+     "carrier",
+     "ip",
+     "province",
+     "city",
+     "session_id",
+     "session_seq",
+     "is_foreground",
+     "channel",
+     "page_id",
+     "event_name",
+     "keyword",
+     "search_type",
+     "result_cnt",
+     "result_type",
+     "result_id",
+     "position",
+     "properties_raw",
+     "etl_time",
+     "dt"
+    ],
+    "caveats": [
+     "search 与 search_click 是两种 event_name，同表混存"
+    ],
+    "partitioned_by": [
+     "dt"
+    ],
+    "layer": "dwd"
+   },
+   "dwd_session": {
+    "grain": "一条会话内事件（app_launch / app_exit 等）",
+    "pk": "event_id",
+    "columns": [
+     "event_id",
+     "event_ts",
+     "server_ts",
+     "user_id",
+     "device_id",
+     "is_login",
+     "is_vip",
+     "app_version",
+     "os",
+     "os_version",
+     "device_model",
+     "network",
+     "carrier",
+     "ip",
+     "province",
+     "city",
+     "session_id",
+     "session_seq",
+     "is_foreground",
+     "channel",
+     "page_id",
+     "event_name",
+     "launch_type",
+     "source",
+     "stay_duration",
+     "exit_type",
+     "properties_raw",
+     "etl_time",
+     "dt"
+    ],
+    "caveats": [
+     "行数 203,639 ≠ 会话数；COUNT(DISTINCT session_id) 才是 114,450",
+     "2026-11-09 起 dws_user_daily.session_cnt 与本表同源（app_launch 全量），可直接交叉校验"
+    ],
+    "partitioned_by": [
+     "dt"
+    ],
+    "layer": "dwd"
+   },
+   "dwd_skip": {
+    "grain": "一次跳过",
+    "pk": "event_id",
+    "columns": [
+     "event_id",
+     "event_ts",
+     "server_ts",
+     "user_id",
+     "device_id",
+     "is_login",
+     "is_vip",
+     "app_version",
+     "os",
+     "os_version",
+     "device_model",
+     "network",
+     "carrier",
+     "ip",
+     "province",
+     "city",
+     "session_id",
+     "session_seq",
+     "is_foreground",
+     "channel",
+     "page_id",
+     "event_name",
+     "song_id",
+     "played_duration",
+     "skip_type",
+     "properties_raw",
+     "etl_time",
+     "dt"
+    ],
+    "caveats": [
+     "跳过事件没有 play_progress，不能与 play_end 混在一起算平均进度"
+    ],
+    "partitioned_by": [
+     "dt"
+    ],
+    "layer": "dwd"
+   },
+   "dws_funnel_daily": {
+    "grain": "天",
+    "pk": [
+     "dt"
+    ],
+    "columns": [
+     "impression_cnt",
+     "click_cnt",
+     "play_start_cnt",
+     "complete_cnt",
+     "interact_cnt",
+     "pay_cnt",
+     "ctr",
+     "click_to_play_rate",
+     "complete_rate",
+     "interact_rate",
+     "pay_conv_rate",
+     "dt"
+    ],
+    "caveats": [
+     "pay_conv_rate 的分母是**曝光**（付费/曝光），不是完播；docs/20 §5.1 写的是五层漏斗，实现是六层，以本表为准",
+     "ctr 恒为 0.2、click_to_play_rate 恒为 1.0，是生成器设定导致的退化，不是业务结论"
+    ],
+    "partitioned_by": [
+     "dt"
+    ],
+    "layer": "dws"
+   },
+   "dws_genre_daily": {
+    "grain": "曲风 × 天",
+    "pk": [
+     "dt",
+     "genre"
+    ],
+    "columns": [
+     "genre",
+     "play_start_cnt",
+     "play_end_cnt",
+     "complete_cnt",
+     "complete_rate",
+     "avg_progress",
+     "user_cnt",
+     "dt"
+    ],
+    "caveats": [
+     "140 = 4 曲风 × 35 天，曲风维度只有 4 类，不要期待长尾",
+     "本表**没有 song_id**，只有曲风级聚合。要数「多少首歌」必须换 dws_song_play_daily（歌×天）再 JOIN dim_song ON song_id"
+    ],
+    "not_for": [
+     "多少首歌",
+     "首歌被播放",
+     "曲目数",
+     "被播放过的歌"
+    ],
+    "partitioned_by": [
+     "dt"
+    ],
+    "layer": "dws"
+   },
+   "dws_province_daily": {
+    "grain": "省 × 市 × 天",
+    "pk": [
+     "dt",
+     "province",
+     "city"
+    ],
+    "columns": [
+     "province",
+     "city",
+     "dau",
+     "play_start_cnt",
+     "session_cnt",
+     "dt"
+    ],
+    "caveats": [
+     "2728 ≈ 78 组合/天；city 无空值，每条都是「某省某市」",
+     "**分省 dau 之和 = 全站 dau**（2026-11-09 实测 113,131 = 113,131）。这是硬判据：不相等说明有跨省用户或游客分组重复计数"
+    ],
+    "partitioned_by": [
+     "dt"
+    ],
+    "layer": "dws"
+   },
+   "dws_revenue_daily": {
+    "grain": "天",
+    "pk": [
+     "dt"
+    ],
+    "columns": [
+     "vip_subscribe_cnt",
+     "order_pay_cnt",
+     "refund_cnt",
+     "pay_user_cnt",
+     "gross_revenue",
+     "refund_amount",
+     "net_revenue",
+     "arpu",
+     "refund_rate",
+     "ad_impression_cnt",
+     "ad_click_cnt",
+     "ad_ctr",
+     "ad_revenue",
+     "dt"
+    ],
+    "caveats": [
+     "arpu 字段名与口径不符，实为 ARPPU（净收入/付费用户数），见 glossary.traps.arpu_misnamed",
+     "金额列全部 DECIMAL(18,2)"
+    ],
+    "partitioned_by": [
+     "dt"
+    ],
+    "layer": "dws"
+   },
+   "dws_search_daily": {
+    "grain": "搜索词 × 天",
+    "pk": [
+     "dt",
+     "keyword"
+    ],
+    "columns": [
+     "keyword",
+     "search_pv",
+     "search_uv",
+     "search_click_pv",
+     "search_click_rate",
+     "zero_result_pv",
+     "zero_result_rate",
+     "avg_result_cnt",
+     "dt"
+    ],
+    "caveats": [
+     "350 = 10 搜索词 × 35 天，词表很小"
+    ],
+    "partitioned_by": [
+     "dt"
+    ],
+    "layer": "dws"
+   },
+   "dws_song_play_daily": {
+    "grain": "歌 × 天",
+    "pk": [
+     "dt",
+     "song_id"
+    ],
+    "columns": [
+     "song_id",
+     "play_start_cnt",
+     "play_end_cnt",
+     "complete_cnt",
+     "complete_rate",
+     "skip_play_cnt",
+     "avg_progress",
+     "avg_play_duration",
+     "dt"
+    ],
+    "caveats": [
+     "complete_rate 已是日粒度比率，跨天聚合必须 SUM(complete_cnt)/SUM(play_start_cnt)，不能 AVG"
+    ],
+    "partitioned_by": [
+     "dt"
+    ],
+    "layer": "dws"
+   },
+   "dws_user_daily": {
+    "grain": "天（全站一行）",
+    "pk": [
+     "dt"
+    ],
+    "columns": [
+     "dau",
+     "session_cnt",
+     "play_start_cnt",
+     "avg_play_per_user",
+     "avg_sess_per_user",
+     "login_user_cnt",
+     "vip_user_cnt",
+     "dt"
+    ],
+    "caveats": [
+     "2026-11-09 起 dau/session_cnt 与 dwd_session(app_launch) 同源（全量活跃 + 全量会话）；play_start_cnt 仍来自 dwd_play_start，所以 avg_play_per_user = 起播次数 / 全量活跃用户数",
+     "login_user_cnt / vip_user_cnt 只对登录用户去重（游客无从判断），两者天然 ≤ dau",
+     "**dau 是「当天去重人数」，跨天不可相加当 UV**：35 天 SUM(dau) = 113,131 是**人日**，窗口去重 UV 只有 23,212，差 4.87 倍。问「这段时间多少用户」必须回明细重算去重，不能 SUM",
+     "旧版（11-09 之前）dau 取自 dwd_play_start，只覆盖「播过歌的人」，比真实活跃低 22%（11-08：2,525 vs 3,237）；看到 2,4xx~2,5xx 的日活跃数说明读到的是旧分区"
+    ],
+    "partitioned_by": [
+     "dt"
+    ],
+    "layer": "dws"
+   },
+   "ods_music_event": {
+    "grain": "一条埋点事件",
+    "pk": "event_id",
+    "columns": [
+     "event_id",
+     "event_name",
+     "event_time",
+     "server_time",
+     "user_id",
+     "device_id",
+     "is_login",
+     "is_vip",
+     "app_version",
+     "os",
+     "os_version",
+     "device_model",
+     "network",
+     "carrier",
+     "ip",
+     "province",
+     "city",
+     "session_id",
+     "session_seq",
+     "is_foreground",
+     "channel",
+     "page_id",
+     "properties",
+     "etl_time",
+     "dt"
+    ],
+    "caveats": [
+     "event_time / server_time 是**毫秒字符串**，必须 CAST 后外套 from_utc_timestamp(...,'Asia/Shanghai')，否则整体早 8 小时（docs/25）",
+     "properties 是 JSON 原文，每次查询都要 get_json_object，不要在 ODS 层直接做指标",
+     "province 是**事件级**字段，同一用户一天内可能出现在多个省，见 glossary.traps.province_dup"
+    ],
+    "partitioned_by": [
+     "dt"
+    ],
+    "layer": "ods"
+   },
+   "ods_user_change": {
+    "grain": "一个用户一条属性记录",
+    "pk": "user_id",
+    "columns": [
+     "user_id",
+     "change_date",
+     "is_vip",
+     "city",
+     "province",
+     "app_version",
+     "os",
+     "device_model",
+     "change_type"
+    ],
+    "caveats": [
+     "无 dt 分区，是全量快照，不能按天增量取"
+    ],
+    "partitioned_by": [],
+    "layer": "ods"
+   },
+   "ops_data_quality": {
+    "grain": "分钟",
+    "columns": [
+     "stat_minute",
+     "events_1m",
+     "errors_1m",
+     "error_rate",
+     "top_rule",
+     "top_rule_cnt",
+     "updated_at"
+    ],
+    "caveats": [
+     "error_rate 是比率型字段，不能跨分钟直接 AVG（R8 会拦）",
+     "每分钟一行；问某一天的错误率要用 SUM(errors_1m)/SUM(events_1m)"
+    ],
+    "partitioned_by": [
+     "stat_minute"
+    ],
+    "layer": "rt"
+   },
+   "ops_job_health": {
+    "grain": "分钟 × 作业",
+    "columns": [
+     "stat_minute",
+     "job_name",
+     "job_id",
+     "state",
+     "run_seconds",
+     "ckpt_size_mb",
+     "ckpt_age_s",
+     "ckpt_failed",
+     "updated_at"
+    ],
+    "caveats": [
+     "一个分钟可能有多个 job，按 job_name 分组，不要直接 SUM(run_seconds)"
+    ],
+    "partitioned_by": [
+     "stat_minute"
+    ],
+    "layer": "rt"
+   },
+   "ops_pipeline_latency": {
+    "grain": "分钟",
+    "columns": [
+     "stat_minute",
+     "ods_lag_s",
+     "dwd_lag_s",
+     "dws_lag_s",
+     "ads_lag_s",
+     "input_rate",
+     "dwd_rows_1m",
+     "kafka_lag_rows",
+     "updated_at"
+    ],
+    "caveats": [
+     "lag 单位是秒；*_lag_s 是各层相对事件时间的端到端延迟",
+     "kafka_lag_rows 是积压行数，与延迟不是同一个指标"
+    ],
+    "partitioned_by": [
+     "stat_minute"
+    ],
+    "layer": "rt"
+   }
+  },
+  "dimensions": {
+   "app_version": {
+    "name_cn": "客户端版本",
+    "field": "app_version",
+    "tables": [
+     "dwd_play_start",
+     "dwd_session",
+     "dim_user"
+    ]
+   },
+   "channel": {
+    "name_cn": "渠道",
+    "field": "channel",
+    "tables": [
+     "dwd_play_start",
+     "dwd_session"
+    ]
+   },
+   "city": {
+    "name_cn": "城市",
+    "field": "city",
+    "tables": [
+     "dim_user",
+     "dws_province_daily"
+    ],
+    "notes": [
+     "dim_user 68 个城市；dws_province_daily 每天 78 个「省×市」组合，说明存在跨省同名城市",
+     "dws_province_daily.city 无空值，每一行都是具体的市，不存在省级汇总行"
+    ]
+   },
+   "cohort_date": {
+    "name_cn": "同期群日期",
+    "field": "cohort_date",
+    "tables": [
+     "ads_user_retention"
+    ],
+    "notes": [
+     "是用户**首次活跃日**，不是统计日；ads_user_retention 靠它而不是 dt 定位"
+    ]
+   },
+   "day_n": {
+    "name_cn": "留存第 N 日",
+    "field": "day_n",
+    "tables": [
+     "ads_user_retention"
+    ],
+    "notes": [
+     "day_n=1 是次日留存；不要把 day_n 当日期，也不要把 0 当次日"
+    ]
+   },
+   "dt": {
+    "name_cn": "日期",
+    "field": "dt",
+    "tables": [
+     "ods_music_event",
+     "dwd_play_start",
+     "dwd_play_end",
+     "dws_user_daily",
+     "ads_daily_overview"
+    ],
+    "notes": [
+     "全库统一用字符串分区列 dt，不是 DATE 类型；与实时侧 Doris 的 dt DATE 不同，跨链路对比要显式转换",
+     "ads_user_retention 没有 dt 分区，用 cohort_date（见该维度）"
+    ]
+   },
+   "genre": {
+    "name_cn": "曲风",
+    "field": "genre",
+    "tables": [
+     "dim_song",
+     "dws_genre_daily",
+     "ads_genre_dist",
+     "ads_song_ranking"
+    ],
+    "notes": [
+     "只有 4 类，属于人工收窄的分类，不是真实曲库的曲风分布",
+     "values 是**曲目数**，不是播放占比；播放占比看 ads_genre_dist.start_share"
+    ]
+   },
+   "is_login": {
+    "name_cn": "登录标识",
+    "field": "is_login",
+    "tables": [
+     "dwd_play_start",
+     "dwd_session"
+    ],
+    "notes": [
+     "同样是字符串；'false' 的行 user_id 通常为空或为设备号"
+    ]
+   },
+   "is_vip": {
+    "name_cn": "会员标识",
+    "field": "is_vip",
+    "tables": [
+     "dwd_play_start",
+     "dim_user"
+    ],
+    "notes": [
+     "是**字符串** 'true'/'false'，不是 BOOLEAN；写 is_vip = 1 或 = TRUE 会静默返回空集"
+    ]
+   },
+   "network": {
+    "name_cn": "网络类型",
+    "field": "network",
+    "tables": [
+     "dwd_play_start"
+    ]
+   },
+   "os": {
+    "name_cn": "操作系统",
+    "field": "os",
+    "tables": [
+     "dwd_play_start",
+     "dwd_session"
+    ]
+   },
+   "position": {
+    "name_cn": "推荐坑位",
+    "field": "position",
+    "tables": [
+     "dwd_impression",
+     "dwd_click"
+    ],
+    "notes": [
+     "0 号位最优，随坑位后移点击率衰减；ctr_by_position 就是按本维度下钻"
+    ]
+   },
+   "province": {
+    "name_cn": "省份",
+    "field": "province",
+    "tables": [
+     "dwd_play_start",
+     "dim_user",
+     "dws_province_daily",
+     "ads_province_dist"
+    ],
+    "notes": [
+     "事件表有 31 个取值，dim_user 只有 28 个 —— 两者不能混用，见 glossary.traps.province_dup",
+     "省份是**事件级**字段，同一用户一天内可能出现在多个省，分省 DAU 求和会大于全站 DAU"
+    ]
+   },
+   "singer": {
+    "name_cn": "歌手",
+    "field": "singer",
+    "tables": [
+     "dim_song",
+     "ads_song_ranking"
+    ]
+   },
+   "song_id": {
+    "name_cn": "歌曲",
+    "field": "song_id",
+    "tables": [
+     "dim_song",
+     "dwd_play_start",
+     "dws_song_play_daily",
+     "ads_song_ranking"
+    ],
+    "notes": [
+     "存在**两套编码**（数字 ID / MusicBrainz MBID），JOIN dim_song 必须兼容两套，否则曲风与榜单 100% 落空（护栏 R14）",
+     "曲库 1486 首，来自 MusicBrainz 抓取"
+    ]
+   }
+  },
+  "glossary": {
+   "ARPPU": {
+    "metric": "arppu"
+   },
+   "ARPU": {
+    "metric": "arpu",
+    "trap": "arpu_misnamed"
+   },
+   "DAU": {
+    "metric": "uv",
+    "note": "英文缩写，同『日活』。注意指标码本身叫 uv，不叫 dau；dau 只是 ADS 表的列名"
+   },
+   "GMV": {
+    "metric": "gross_revenue",
+    "note": "GMV 本质是流水口径，取毛收入；不要映射到净收入 revenue_sum"
+   },
+   "互动": {
+    "metric": "interact_cnt"
+   },
+   "互动率": {
+    "metric": "interact_rate"
+   },
+   "人均听歌": {
+    "metric": "avg_play_per_user"
+   },
+   "人均播放次数": {
+    "metric": "avg_play_per_user"
+   },
+   "人均收入": {
+    "metric": "arpu",
+    "trap": "arpu_misnamed"
+   },
+   "人均起播次数": {
+    "metric": "avg_play_per_user"
+   },
+   "付费人均": {
+    "metric": "arppu"
+   },
+   "付费渗透率": {
+    "metric": "pay_rate"
+   },
+   "付费率": {
+    "metric": "pay_rate",
+    "note": "分子是去重付费用户，不是订单数"
+   },
+   "付费用户": {
+    "metric": "pay_uv"
+   },
+   "付费用户占比": {
+    "metric": "pay_rate",
+    "note": "同「付费率」：去重付费用户 / DAU"
+   },
+   "付费用户比例": {
+    "metric": "pay_rate"
+   },
+   "付费转化率": {
+    "metric": "pay_rate",
+    "note": "问数语境下沿用 pay_rate；漏斗口径另见 funnel 指标"
+   },
+   "付费金额": {
+    "metric": "gross_revenue"
+   },
+   "会员": {
+    "field": "is_vip",
+    "note": "字符串 'true'/'false'"
+   },
+   "分享": {
+    "metric": "share_cnt"
+   },
+   "千次曝光收入": {
+    "metric": "ad_ecpm"
+   },
+   "听完率": {
+    "metric": "complete_rate"
+   },
+   "听歌量": {
+    "metric": "play_start_cnt"
+   },
+   "坑位": {
+    "dimension": "position"
+   },
+   "城市": {
+    "dimension": "city"
+   },
+   "多少首歌被播放": {
+    "metric": "played_song_cnt"
+   },
+   "完播": {
+    "metric": "complete_cnt",
+    "note": "play_progress >= 0.9"
+   },
+   "完播率": {
+    "metric": "complete_rate"
+   },
+   "平台": {
+    "dimension": "os"
+   },
+   "广告点击率": {
+    "metric": "ad_ctr"
+   },
+   "排行榜": {
+    "metric": "play_start_cnt",
+    "note": "播放量榜要在 dws_song_play_daily 上按 play_start_cnt 排序、歌名 JOIN dim_song；ads_song_ranking 是按完播率排的榜，不能当播放量榜"
+   },
+   "推荐位": {
+    "dimension": "position"
+   },
+   "搜不到": {
+    "metric": "search_zero_cnt",
+    "note": "零结果搜索数"
+   },
+   "搜索点击率": {
+    "metric": "search_click_rate"
+   },
+   "搜索量": {
+    "metric": "search_cnt"
+   },
+   "播放曲目数": {
+    "metric": "played_song_cnt"
+   },
+   "播放次数": {
+    "metric": "play_start_cnt"
+   },
+   "播放进度": {
+    "metric": "avg_progress",
+    "note": "只统计有结束事件的播放，不含跳过"
+   },
+   "播放量": {
+    "metric": "play_start_cnt",
+    "note": "业务口语「播放量」通常指起播次数，不是去重歌曲数"
+   },
+   "播放量最高": {
+    "metric": "play_start_cnt",
+    "note": "在 dws_song_play_daily 上 ORDER BY play_start_cnt DESC；不要用 ads_song_ranking（完播率排序）"
+   },
+   "收入": {
+    "metric": "revenue_sum",
+    "note": "口径默认是净收入 = 毛收入 - 退款"
+   },
+   "收藏": {
+    "metric": "collect_cnt",
+    "note": "必须带 action='add'"
+   },
+   "新增用户": {
+    "field": "cohort_date",
+    "note": "首次活跃日 = cohort_date，新增量按 cohort_size 取"
+   },
+   "无结果率": {
+    "metric": "search_zero_rate"
+   },
+   "日活": {
+    "metric": "uv",
+    "note": "口径为有 app_launch 的去重用户；ADS 里叫 dau"
+   },
+   "曲目数": {
+    "metric": "played_song_cnt"
+   },
+   "曲风": {
+    "dimension": "genre"
+   },
+   "机型系统": {
+    "dimension": "os"
+   },
+   "榜单": {
+    "metric": "play_start_cnt",
+    "note": "同『排行榜』：dws_song_play_daily 排序 + dim_song 取歌名"
+   },
+   "次日留存": {
+    "metric": "retention_d1"
+   },
+   "歌手": {
+    "dimension": "singer"
+   },
+   "歌曲": {
+    "dimension": "song_id"
+   },
+   "活跃用户": {
+    "metric": "uv"
+   },
+   "流水": {
+    "metric": "gross_revenue",
+    "note": "口语「流水」指毛收入（退款前）。与「收入」（净额）不同，必须区分；2026-11-09 前两者误用同一个指标，导致收入被低估 5.24 倍"
+   },
+   "消费": {
+    "metric": "gross_revenue",
+    "note": "「消费」= 用户实际支付的金额（毛额/流水），**不是播放、收听、起播次数**；数据在 dwd_pay.amount，禁止去 dwd_play_start 数次数"
+   },
+   "消费最多": {
+    "metric": "gross_revenue",
+    "note": "「消费最多的用户」按用户主体分组 SUM(amount) 降序取 TOP1，来源 dwd_pay；不是播歌最多的用户。用户主体用 COALESCE(NULLIF(user_id,''), device_id)，或显式排除 user_id='' 的匿名记录——不要把匿名支付聚成一个『用户』"
+   },
+   "消费金额": {
+    "metric": "gross_revenue"
+   },
+   "渠道": {
+    "dimension": "channel"
+   },
+   "漏斗": {
+    "metric": "funnel_rate"
+   },
+   "点击率": {
+    "metric": "ctr"
+   },
+   "点赞": {
+    "metric": "like_cnt",
+    "note": "必须带 action='add'"
+   },
+   "热歌榜": {
+    "metric": "play_start_cnt",
+    "note": "同『排行榜』；若问的是完播率榜才用 ads_song_ranking"
+   },
+   "版本": {
+    "dimension": "app_version"
+   },
+   "用户数": {
+    "metric": "uv"
+   },
+   "留存": {
+    "metric": "retention_d1",
+    "note": "默认次日留存；要 7 日必须显式说 day_n=7"
+   },
+   "留存率": {
+    "metric": "retention_d1"
+   },
+   "省": {
+    "dimension": "province"
+   },
+   "省份": {
+    "dimension": "province"
+   },
+   "花了多少钱": {
+    "metric": "gross_revenue"
+   },
+   "被播放过的歌": {
+    "metric": "played_song_cnt",
+    "note": "dim_song 全量民谣 240 首，2026-11-08 被播放的只有 237 首"
+   },
+   "评论": {
+    "field": "event_name",
+    "note": "event_name='comment'，已含在 interact_cnt 里"
+   },
+   "起播": {
+    "metric": "play_start_cnt"
+   },
+   "跳过率": {
+    "metric": "skip_rate"
+   },
+   "转化率": {
+    "metric": "funnel_rate",
+    "note": "「转化率」歧义最大，必须问清是哪两层之间"
+   },
+   "退款率": {
+    "metric": "refund_rate"
+   },
+   "销售额": {
+    "metric": "revenue_sum",
+    "note": "「销售额」口语上等同于收入净额；带省份维度时路由到 revenue_sum_province（dev_province_revenue_daily），全国日趋势用 revenue_sum"
+   },
+   "零结果率": {
+    "metric": "search_zero_rate"
+   },
+   "风格": {
+    "dimension": "genre"
+   },
+   "首歌被播放": {
+    "metric": "played_song_cnt",
+    "note": "问的是当日**有播放**的曲目，不是曲库总量；按曲风筛要 JOIN dim_song ON song_id"
+   },
+   "高消费用户": {
+    "metric": "gross_revenue"
+   }
+  }
+ }
+}

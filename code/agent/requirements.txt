@@ -1,0 +1,40 @@
+# Data Agent 运行依赖
+#
+# 安装：
+#     pip install -r requirements.txt
+#
+# 如果公司网络/校园网连不上 PyPI（本机实测 SSL handshake 超时），
+# 改用本地 wheel：
+#     pip install --no-index --find-links=_wheels -r requirements.txt
+# _wheels/ 里备了 17 个包，覆盖 langgraph 的完整依赖树。
+#
+# 注意：sqlglot 不要随便升级。护栏 guard.py 同时要在集群的 Python 3.6 上跑，
+# 那边只能装 6.3；本地 30.x 的写法（t.catalog、j.this）在 6.3 上是不存在的。
+# guard.py 里已经用 getattr / args 做了兼容，但升级前请先跑 agent/guards/test_cases.sh。
+
+# --- 数据通路
+pymysql>=1.0
+PyYAML>=6.0
+
+# --- Agent 编排（B/C 阶段的图就是它）
+langgraph==1.1.2
+langchain-core>=0.3
+
+# --- LLM 客户端（llm.py 直接用 httpx，不引 langchain-openai）
+httpx>=0.27
+
+# --- 护栏（本地开发用新版，集群用 6.3，两边都要能跑）
+sqlglot>=6.3
+
+# --- 结构化输出校验（schemas.py）
+# 以前是 langgraph / fastapi 带进来的传递依赖，2026-11-15 起 schemas.py 直接
+# import 它，就显式写在这里：传递依赖哪天被上游换掉，坏的会是生成链路，
+# 而不是一条 pip 解析警告。
+pydantic>=2.7,<3
+
+# --- 检索分词（D 阶段）
+# jieba 不通过 pip 装：本机 pip 连不上 PyPI，且它的 sdist 需要联网构建后端。
+# 已把精简版（仅分词必需的 dict.txt + finalseg，7.4MB）放进 _vendor/jieba，
+# 由 _bootstrap.py 注入 sys.path，开箱即用；缺失时 retrieval.py 自动退化成
+# 中文二元切分。离线安装包留在 _wheels/jieba-0.42.1.tar.gz。
+# jieba==0.42.1

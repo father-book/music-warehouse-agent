@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>音乐实时数据大屏</title>
+<script src="/static/echarts.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  /* 设计令牌：整套视觉只有这几个颜色。
+     深色监控台的通用做法 —— 底色接近黑但不纯黑（纯黑死板、投影发灰），
+     面板比底色亮一档、靠 1px 描边分层，不靠阴影（深色上阴影只会糊成一团）。
+     强调色只留一个蓝：红/黄/绿只承担语义（负向 / 警示 / 正向），不做装饰。 */
+  :root {
+    --bg: #0a0d12;
+    --panel: #11161e;
+    --panel-hi: #151c26;
+    --line: #283343;
+    --line-soft: #1f2836;
+    --ink: #e9eff7;
+    --ink-2: #a3b0c2;
+    --ink-3: #78879a;
+    --accent: #4c8dff;
+    --pos: #3fb950;
+    --neg: #e5534b;
+    --warn: #d8a13c;
+  }
+  html { height: 100%; }
+  /* 页面高度交给内容决定（不再锁 100vh）：
+     面板多、指标密的时候硬塞进一屏只会把图表压扁、文字挤在一起。
+     现在给每一行留足像素高度，超出视口就是整页滚动 —— 大屏允许滚动，
+     换来的是图表和数字都舒展、看得清。
+     滚动条住在外层 body 上（html 不设 overflow），滚轮/触控板顺滑，
+     也不会出现「内层滚动、外层不动」的双滚动条。 */
+  body {
+    margin: 0;
+    min-height: 100%;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  /* 一层极淡的工程网格：48px 见方、透明度 2%，只在大面积深底上给一点「仪表台」质感。
+     不用渐变光斑 / 发光 —— 那是模板味；细网格是终端和数据工具的语言。 */
+  body::before {
+    content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background-image:
+      linear-gradient(to right, rgba(255,255,255,.022) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255,255,255,.022) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+  /* 深色底上的默认滚动条是浅灰圆角块，非常出戏，单独调 */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: #070a0e; }
+  ::-webkit-scrollbar-thumb {
+    background: #232c39; border-radius: 5px; border: 2px solid #070a0e;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: #2f3a4a; }
+
+  .grid {
+    position: relative; z-index: 1;
+    display: grid;
+    grid-template-columns: 232px minmax(0,1fr) 332px;
+    /* 每行给像素下限、不再用 fr 分配：行高稳定，图表画布不会被挤成一条缝。
+       总高约 1300px，1080 屏滚一下看完全部，比原来一屏硬塞舒服。 */
+    grid-template-rows: 58px 380px 300px 300px 224px;
+    gap: 14px; padding: 16px 20px 26px;
+    min-height: 100vh;
+    align-content: start;
+  }
+  /* 顶栏不做成卡片：一条通栏 + 1px 底边线。卡片化会让「标题」和「数据面板」
+     变成同一层级，反而显乱；一条细线就够了，这是运维台 / 交易所终端的常规处理。 */
+  /* 顶栏两组：左边「标题 + 实时在线」，右边一串链路指标。
+     试过用三栏等分把在线人数放正中间 —— 一遇到指标多就会顶穿重叠（实测压到「链路健康」上），
+     而大屏顶栏本来就没有「必须居中」的语义，靠边分组反而更稳、也更像运维台。 */
+  .header {
+    grid-column: 1/4;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 2px;
+    border-bottom: 1px solid var(--line);
+  }
+  .brand { display: flex; align-items: center; gap: 22px; min-width: 0; }
+  .header h1 {
+    font-size: 18px; font-weight: 600; margin: 0; color: var(--ink);
+    letter-spacing: .16em; line-height: 22px;
+    display: flex; align-items: center;
+  }
+  /* 标题前的色块只有 3×14px：比整条 3px 通高左边框克制得多 */
+  .header h1::before {
+    content: ""; width: 3px; height: 14px; background: var(--accent);
+    border-radius: 1px; margin-right: 11px;
+  }
+  .online {
+    display: flex; align-items: baseline; gap: 9px; flex-shrink: 0;
+    padding-left: 22px; border-left: 1px solid var(--line);
+  }
+  .online .num {
+    font-size: 22px; font-weight: 600; color: var(--accent);
+    font-variant-numeric: tabular-nums; letter-spacing: -.01em;
+  }
+  .online .lbl { font-size: 11px; color: var(--ink-3); letter-spacing: .04em; }
+  /* 指标之间用 1px 竖线分组：一串数字平铺时读不出边界，加了细线才像仪表盘而不是句子 */
+  .meta { font-size: 12px; color: #8b9aad; display: flex; align-items: center;
+          justify-self: end; white-space: nowrap; overflow: hidden; }
+  .meta > span { padding: 0 11px; position: relative; }
+  .meta > span + span::before {
+    content: ""; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+    width: 1px; height: 11px; background: var(--line);
+  }
+  .meta > span:first-child { padding-left: 0; }
+  .meta > span:last-child { padding-right: 0; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .meta > span#refresh-info { color: var(--ink-3); }
+  .meta > span { flex-shrink: 0; }
+  /* 窄屏优先砍掉次要指标，保住「链路状态」「DWD 延迟」「入口/总量」——它们才是判断健康的核心 */
+  @media (max-width: 1440px) {
+    .meta #hb-err, .meta #hb-dup { display: none; }
+    .meta > span { padding: 0 8px; }
+  }
+  @media (max-width: 1280px) {
+    .meta #hb-vol { display: none; }
+  }
+  /* 顶栏数字提亮，和标签（ink-3）拉开层级；状态色只染「值」不染标签 */
+  .meta b { font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .meta .ok b { color: var(--pos); }
+  .meta .warn b { color: var(--warn); }
+  .meta .bad b, .meta .bad { color: var(--neg); }
+  .meta .unknown b { color: var(--ink-3); }
+  .dot.bad { background: var(--neg); animation: none; }
+  .dot.warn { background: var(--warn); animation: none; }
+  .dot.unknown { background: var(--ink-3); animation: none; }
+  .dot {
+    width: 5px; height: 5px; border-radius: 50%; background: var(--pos);
+    display: inline-block; margin-right: 7px; vertical-align: 1px;
+    animation: pulse 2.4s ease-in-out infinite;
+  }
+  /* 呼吸幅度压到 0.45：深色底上大幅明暗跳动很吵，状态灯只需「活着」的暗示 */
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.45} }
+
+  /* 面板：比底色亮一档 + 1px 描边。深色界面上不叠阴影 —— 阴影在暗底上看不见，
+     只会让边缘发糊，反而降低「清晰」感。 */
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 4px; padding: 12px 14px;
+    display: flex; flex-direction: column; min-height: 0; min-width: 0;
+  }
+  /* 面板标题做成「表头」：小字 + 字距 + 一条通栏细线。
+     这一条线是整屏秩序的主要来源 —— 每个面板有明确的起始，眼睛不用猜哪块属于谁。
+     不用阴影、不用渐变、不用彩色标题，全靠排版层级。 */
+  .panel-title {
+    font-size: 11.5px; color: var(--ink-2); font-weight: 500; letter-spacing: .1em;
+    margin: 0 0 10px; padding-bottom: 9px; border-bottom: 1px solid var(--line-soft);
+    display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+  }
+  .panel-title .sub {
+    color: var(--ink-3); font-size: 10.5px; letter-spacing: .02em; font-weight: 400;
+    text-align: right; flex-shrink: 0;
+  }
+  /* position: relative 给环形图圆心文字做锚点；overflow: hidden 是兜底裁剪 ——
+     ECharts 的 canvas 尺寸在 init 时就定死了，容器后来被压缩（比如数字区从 4 格变 6 格）
+     而没触发 resize，画布就会溢出面板。真正治本的是下面的 ResizeObserver。 */
+  .chart { flex: 1; min-height: 0; position: relative; overflow: hidden; }
+
+  /* 环形图圆心的总量文字：用 HTML 覆盖层而不是 ECharts graphic。
+     graphic 的 left 是元素左边界，textAlign 无法把文本居中到锚点，
+     数字一长就从右侧顶到环上被切断（实测「69,78…」）。
+     绝对定位 + translate(-50%,-50%) 是唯一稳的做法。 */
+  .donut-center {
+    position: absolute; transform: translate(-50%, -50%);
+    text-align: center; pointer-events: none; line-height: 1.3;
+  }
+  .donut-center .n { font-size: 16px; font-weight: 600; color: var(--ink); letter-spacing: .02em; }
+  .donut-center .s { font-size: 10px; color: var(--ink-3); margin-top: 2px; }
+
+  .kpis { grid-row: 2/5; display: grid; grid-template-rows: repeat(5, minmax(0,1fr)); gap: 12px; }
+  /* KPI 卡去掉了原来那条 3px 的彩色竖条：
+     它只是装饰，却让 5 张卡看起来像 5 个不同告警级别。
+     层级改由「标签小字 + 大号数字」本身承担，数字着色只表达好/坏，不表达分类。 */
+  .kpi {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 4px; padding: 0 18px;
+    display: flex; flex-direction: column; justify-content: center;
+    transition: background .35s ease, border-color .35s ease;
+  }
+  /* 数据刷新时的反馈：只把边框提亮一点，不做整卡高亮闪烁 —— 10 秒一次闪一次太吵 */
+  .kpi.flash { background: var(--panel-hi); border-color: #2c3a4e; }
+  .kpi .label { font-size: 11px; color: var(--ink-3); letter-spacing: .08em; }
+  .kpi .value {
+    font-size: 32px; font-weight: 600; color: var(--ink); line-height: 1.15;
+    letter-spacing: -.015em; font-variant-numeric: tabular-nums; margin-top: 3px;
+  }
+  .kpi .value small { font-size: 12px; color: var(--ink-3); margin-left: 3px; font-weight: 400; letter-spacing: 0; }
+  .kpi .value.green { color: var(--pos); }
+  .kpi .value.red { color: var(--neg); }
+  .kpi .value.blue { color: var(--accent); }
+
+  /* 中区上半：左右分栏 —— 地图只占一半，右边放实时曲风分布 */
+  .mid-top {
+    grid-column: 2; grid-row: 2;
+    display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.05fr);
+    gap: 14px; min-height: 0; min-width: 0;
+  }
+  .map-box { min-width: 0; }
+  .genre-box { min-width: 0; }
+  .trend-box { grid-column: 2; grid-row: 3; }
+  /* 底部一行三块：歌手榜 / 商业化 / 用户结构 */
+  .bottom-row {
+    grid-column: 2/4; grid-row: 4;
+    display: grid; grid-template-columns: minmax(0,1fr) minmax(0,0.95fr) minmax(0,0.8fr);
+    gap: 14px; min-height: 0; min-width: 0;
+  }
+  .bottom-row .panel { min-width: 0; }
+  /* 紧凑统计块：数字为主、标签为注。标签压到 10.5px 并加字距，
+     大屏远看时数字先跳出来，标签只在近看时补语义。 */
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; }
+  .stat .k { font-size: 10.5px; color: var(--ink-3); letter-spacing: .06em; }
+  .stat .v { font-size: 19px; font-weight: 600; color: var(--ink);
+             letter-spacing: -.01em; font-variant-numeric: tabular-nums; line-height: 1.2; margin-top: 2px; }
+  .stat .v small { font-size: 11px; color: var(--ink-3); font-weight: 400; margin-left: 2px; letter-spacing: 0; }
+  .stat .v.green { color: var(--pos); } .stat .v.red { color: var(--neg); }
+  .stat .v.blue { color: var(--accent); }  .stat .v.amber { color: var(--warn); }
+  .stat .v.grey { color: var(--ink-2); }
+  /* 商业化：收入是这一屏唯一的「主指标」，字号最大、颜色保持中性 ——
+     原来用大红字，在深色底上等于报警；收入不是告警，用最高亮度（白）压版面就够。 */
+  .biz-hero { grid-column: 1/3; padding-bottom: 9px; border-bottom: 1px solid var(--line-soft); margin-bottom: 8px; }
+  .biz-hero .k { font-size: 10.5px; color: var(--ink-3); letter-spacing: .08em; }
+  .biz-hero .v { font-size: 31px; font-weight: 600; color: var(--ink);
+                 font-variant-numeric: tabular-nums; line-height: 1.1; letter-spacing: -.02em; margin-top: 2px; }
+  .biz-hero .sub { font-size: 10.5px; color: var(--ink-3); margin-top: 3px; }
+  .user-box .stat-grid { grid-template-columns: repeat(3, 1fr); }
+  .session-box .stat-grid { grid-template-columns: repeat(3, 1fr); }
+  .mini-bar { margin-top: 8px; }
+  .mini-bar .row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+  .mini-bar .nm { font-size: 10.5px; color: var(--ink-2); width: 48px; flex-shrink: 0;
+                  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mini-bar .track { flex: 1; height: 4px; background: #1b232f; border-radius: 2px; overflow: hidden; }
+  .mini-bar .fill { height: 100%; border-radius: 2px; background: var(--accent); opacity: .85; }
+  .mini-bar .pct { font-size: 10px; color: var(--ink-3); width: 34px; text-align: right;
+                   font-variant-numeric: tabular-nums; }
+  .rank-box { grid-column: 3; grid-row: 2/4; }
+
+  /* 底部整行「内容与互动」四联卡：推荐 / 互动 / 搜索 / 交易。
+     单开一行而不是塞进 bottom-row —— 那里已经三块面板，再加会把每块压到 200px 以内。
+     这一行横跨 1/4 列，4 张等宽卡各自「标题 + 主数字 + 明细」。 */
+  .content-box { grid-column: 1/4; grid-row: 5; }
+  .content-cards {
+    display: grid; grid-template-columns: repeat(4, minmax(0,1fr));
+    gap: 14px; flex: 1; min-height: 0;
+  }
+  /* 四联卡用比面板亮一档的底、更淡的描边：作为「面板里的子卡片」，
+     视觉上要退到第三层，不能和主面板抢。 */
+  .ccard {
+    border: 1px solid var(--line-soft); border-radius: 4px; padding: 12px 14px;
+    display: flex; flex-direction: column; justify-content: center;
+    background: var(--panel-hi);
+    min-width: 0;
+  }
+  .ccard .k { font-size: 10.5px; color: var(--ink-3); letter-spacing: .06em; white-space: nowrap;
+              overflow: hidden; text-overflow: ellipsis; }
+  .ccard .v { font-size: 27px; font-weight: 600; color: var(--ink); line-height: 1.2;
+              letter-spacing: -.015em; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .ccard .v small { font-size: 12px; font-weight: 400; color: var(--ink-3); margin-left: 3px; letter-spacing: 0; }
+  .ccard .v.green { color: var(--pos); } .ccard .v.red { color: var(--neg); }
+  .ccard .v.blue { color: var(--accent); }  .ccard .v.amber { color: var(--warn); }
+  .ccard .d { font-size: 10.5px; color: var(--ink-3); margin-top: 5px; white-space: nowrap;
+              overflow: hidden; text-overflow: ellipsis; }
+  .ccard .d b { color: var(--ink-2); font-weight: 500; font-variant-numeric: tabular-nums; }
+
+  .rank-list { flex: 1; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-start; }
+  /* 榜单做成安静的表格：序号等宽右对齐，靠 1px 行线分隔。
+     前三名只做「蓝色 + 加粗」，不用彩色徽章 —— 20 行带 20 个色块，整屏就花了。 */
+  .rank-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; font-size: 12.5px;
+              border-bottom: 1px solid rgba(255,255,255,.028); }
+  .rank-row:last-child { border-bottom: 0; }
+  .rank-no {
+    width: 20px; text-align: right; flex-shrink: 0;
+    font-size: 11.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; letter-spacing: .02em;
+  }
+  .rank-no.t1, .rank-no.t2, .rank-no.t3 { color: var(--accent); font-weight: 600; }
+  .rank-song { flex: 1; min-width: 0; color: #c8d3e2; }
+  .rank-song .ag { color: var(--ink-3); font-size: 11px; }
+  .rank-cnt { color: var(--ink-2); font-variant-numeric: tabular-nums; font-size: 12.5px; font-weight: 500; }
+  .rank-bar {
+    height: 1px; margin-top: 4px; border-radius: 1px;
+    background: linear-gradient(90deg, rgba(76,141,255,.55), rgba(76,141,255,.02));
+  }
+</style>
+</head>
+<body>
+<div class="grid">
+  <div class="header">
+    <div class="brand">
+    <h1>音乐实时数据大屏</h1>
+    <div class="online">
+      <span class="num" id="online-num">—</span>
+      <span class="lbl">人实时在线（近 5 分钟）</span>
+    </div>
+    </div>
+    <div class="meta">
+      <span class="ok" id="hb-state-wrap"><span class="dot" id="hb-dot"></span><b id="hb-state">连接中…</b></span>
+      <span id="hb-lat">链路延迟 —</span>
+      <span id="hb-rate">入口 —</span>
+      <span id="hb-vol">今日处理 —</span>
+      <span id="hb-err">异常率 —</span>
+      <span id="hb-dup">重报率 —</span>
+      <span id="refresh-info">等待数据…</span>
+      <span id="clock"></span>
+    </div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi"><div class="label">今日播放量</div><div class="value" id="v-play">—</div></div>
+    <div class="kpi"><div class="label">累计独立设备</div><div class="value blue" id="v-uv">—</div></div>
+    <div class="kpi"><div class="label">完播率</div><div class="value green" id="v-finish">—</div></div>
+    <div class="kpi"><div class="label">切歌率</div><div class="value red" id="v-skip">—</div></div>
+    <div class="kpi"><div class="label">单次平均时长</div><div class="value" id="v-dur">—</div></div>
+  </div>
+
+  <div class="mid-top">
+    <div class="panel map-box">
+      <div class="panel-title">各省播放热度 <span class="sub" id="map-sub">近 10 分钟滚动 · 色深 → 播放量高</span></div>
+      <div class="chart" id="map-chart"></div>
+    </div>
+    <div class="panel biz-box">
+      <div class="panel-title">今日商业化 <span class="sub" id="biz-sub">订单 · 收入 · ARPPU</span></div>
+      <div class="stat-grid" id="biz-grid"></div>
+      <div class="chart" id="sku-chart"></div>
+    </div>
+  </div>
+
+  <div class="panel trend-box">
+    <div class="panel-title">近 30 分钟播放趋势 <span class="sub">DWS · 1 分钟窗口</span></div>
+    <div class="chart" id="trend-chart"></div>
+  </div>
+
+  <div class="bottom-row">
+    <div class="panel user-box">
+      <div class="panel-title">用户结构 <span class="sub" id="user-sub">近 10 分钟 · 按设备</span></div>
+      <div class="stat-grid" id="user-grid"></div>
+      <div class="chart" id="os-chart"></div>
+    </div>
+
+    <div class="panel genre-box">
+      <div class="panel-title">实时听歌曲风 <span class="sub" id="genre-sub">近 10 分钟 · 按播放量</span></div>
+      <div class="chart" id="genre-chart">
+        <div class="donut-center" id="genre-center"></div>
+      </div>
+    </div>
+
+    <div class="panel session-box">
+      <div class="panel-title">会话粘性 <span class="sub" id="session-sub">近 10 分钟 · 滚动</span></div>
+      <div class="stat-grid" id="session-grid"></div>
+    </div>
+  </div>
+
+  <div class="panel rank-box">
+    <div class="panel-title">实时热榜 Top 20 <span class="sub" id="rank-sub">近 10 分钟滚动 · 每分钟更新</span></div>
+    <div class="rank-list" id="rank-list"></div>
+  </div>
+
+  <div class="panel content-box">
+    <div class="panel-title">内容与互动 <span class="sub" id="content-sub">今日累计 · 推荐 / 互动 / 搜索 / 交易</span></div>
+    <div class="content-cards" id="content-cards"></div>
+  </div>
+</div>
+
+<script>
+const PROV_FULL = {
+  '北京':'北京市','天津':'天津市','上海':'上海市','重庆':'重庆市',
+  '河北':'河北省','山西':'山西省','辽宁':'辽宁省','吉林':'吉林省','黑龙江':'黑龙江省',
+  '江苏':'江苏省','浙江':'浙江省','安徽':'安徽省','福建':'福建省','江西':'江西省',
+  '山东':'山东省','河南':'河南省','湖北':'湖北省','湖南':'湖南省',
+  '广东':'广东省','海南':'海南省','四川':'四川省','贵州':'贵州省','云南':'云南省',
+  '陕西':'陕西省','甘肃':'甘肃省','青海':'青海省','台湾':'台湾省',
+  '内蒙古':'内蒙古自治区','广西':'广西壮族自治区','西藏':'西藏自治区',
+  '宁夏':'宁夏回族自治区','新疆':'新疆维吾尔自治区',
+  '香港':'香港特别行政区','澳门':'澳门特别行政区'
+};
+
+const mapChart = echarts.init(document.getElementById('map-chart'));
+const trendChart = echarts.init(document.getElementById('trend-chart'));
+const genreChart = echarts.init(document.getElementById('genre-chart'));
+const skuChart = echarts.init(document.getElementById('sku-chart'));
+const osChart = echarts.init(document.getElementById('os-chart'));
+
+// 图表主题：和 CSS 里的设计令牌一一对应（深色底不能沿用 ECharts 默认的浅色轴/白 tooltip，
+// 否则会出现「页面是黑的、图表还留着白框」的割裂感）。
+const C = {
+  ink: '#e8eef7', ink2: '#97a4b6', ink3: '#5c6878',
+  accent: '#4c8dff', pos: '#3fb950', neg: '#e5534b', warn: '#d8a13c',
+  line: '#2a3444', lineSoft: 'rgba(255,255,255,.05)', panel: '#11161e'
+};
+const AXIS_LABEL = { color: C.ink3, fontSize: 10.5 };
+const AXIS_LINE = { lineStyle: { color: C.line } };
+const SPLIT = { lineStyle: { color: C.lineSoft, type: [3, 3] } };
+const TOOLTIP = {
+  backgroundColor: 'rgba(17,22,30,.97)', borderColor: C.line, borderWidth: 1,
+  textStyle: { color: C.ink, fontSize: 12 },
+  extraCssText: 'border-radius:4px; box-shadow:0 10px 28px rgba(0,0,0,.55);'
+};
+
+function fmt(n) { return n == null ? '—' : Number(n).toLocaleString('zh-CN'); }
+const pct = (v) => v == null ? '—' : v + '<small>%</small>';
+
+function renderKpi(o, active) {
+  if (!o) return;
+  document.getElementById('v-play').textContent = fmt(o.total_play);
+  document.getElementById('v-uv').textContent = fmt(o.total_uv);
+  document.getElementById('v-finish').innerHTML = pct(o.finish_rate);
+  document.getElementById('v-skip').innerHTML = pct(o.skip_rate);
+  document.getElementById('v-dur').innerHTML = (o.avg_play_duration ?? '—') + '<small>秒</small>';
+  document.getElementById('online-num').textContent = fmt(active?.online_uv ?? 0);
+  document.querySelectorAll('.kpi').forEach(el => {
+    el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 450);
+  });
+}
+
+function renderMap(rows, win) {
+  const data = (rows || []).map(r => ({
+    name: PROV_FULL[r.province] || r.province,
+    value: r.play_cnt, share: r.play_share
+  }));
+  document.getElementById('map-sub').textContent =
+    win ? `${win} · 每分钟滚动` : '近 10 分钟滚动 · 色深 → 播放量高';
+  const max = Math.max(...data.map(d => d.value), 1);
+  mapChart.setOption({
+    tooltip: {
+      ...TOOLTIP, trigger: 'item',
+      formatter: (p) => {
+        if (!p.data) return `${p.name}<br/>暂无数据`;
+        return `${p.name}<br/>播放量 ${fmt(p.data.value)}<br/>占比 ${p.data.share}%`;
+      }
+    },
+    // 热力改成单色蓝阶而不是红：红色在国内大屏上被用滥了，且「红=告警」，
+    // 播放热度是业务量级不是异常。单色梯度 + 深色底，才像数据工具而不是宣传页。
+    visualMap: {
+      min: 0, max, left: 6, bottom: 8, itemWidth: 8, itemHeight: 56,
+      text: ['高', '低'], textStyle: { color: C.ink3, fontSize: 10 },
+      inRange: { color: ['#26405c', '#2b6494', '#3884c2', '#4c8dff', '#a8ccff'] }
+    },
+    series: [{
+      type: 'map', map: 'china', roam: false,
+      layoutCenter: ['50%', '50%'], layoutSize: '103%',
+      itemStyle: { areaColor: '#1a2330', borderColor: '#42556f', borderWidth: 0.6 },
+      emphasis: {
+        itemStyle: { areaColor: '#31527d', borderColor: '#4c8dff' },
+        label: { show: true, color: C.ink, fontSize: 11 }
+      },
+      label: { show: false },
+      data
+    }]
+  });
+}
+
+function renderTrend(rows) {
+  const list = rows || [];
+  const xMin = list.length ? list[0].ts : Date.now() - 30 * 60000;
+  const xMax = Math.max(Date.now(), list.length ? list[list.length - 1].ts : Date.now());
+  const span = Math.max(xMax - xMin, 3 * 60000);
+  trendChart.setOption({
+    grid: { left: 44, right: 16, top: 26, bottom: 20 },
+    tooltip: { ...TOOLTIP, trigger: 'axis', axisPointer: { type: 'line', lineStyle: { color: '#334155' } } },
+    legend: { data: ['播放量', 'UV'], right: 8, top: 0, textStyle: { color: C.ink3, fontSize: 10.5 }, itemWidth: 10, itemHeight: 6 },
+    xAxis: {
+      type: 'time', min: xMin - span * 0.02, max: xMax + span * 0.02, ...AXIS_LINE,
+      axisLabel: { ...AXIS_LABEL, formatter: (v) => {
+        const d = new Date(v); return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+      }},
+      splitLine: { show: false }
+    },
+    yAxis: { type: 'value', min: 0, max: list.length ? null : 8, splitNumber: 4,
+             ...AXIS_LINE, axisLabel: AXIS_LABEL, splitLine: SPLIT },
+    series: [
+      {
+        name: '播放量', type: 'line', smooth: true, symbol: 'circle', symbolSize: 3,
+        data: list.map(r => [r.ts, r.play_cnt]),
+        lineStyle: { width: 2, color: C.accent },
+        itemStyle: { color: C.accent },
+        areaStyle: { color: new echarts.graphic.LinearGradient(0,0,0,1,[
+          { offset: 0, color: 'rgba(76,141,255,.22)' }, { offset: 1, color: 'rgba(76,141,255,0)' }]) }
+      },
+      {
+        name: 'UV', type: 'line', smooth: true, symbol: 'circle', symbolSize: 3,
+        data: list.map(r => [r.ts, r.uv]),
+        lineStyle: { width: 1.2, color: '#7f8ea3', type: 'dashed' },
+        itemStyle: { color: '#7f8ea3' }
+      }
+    ],
+    // 空窗口时给一句说明，否则只剩两条空坐标轴，看着像图表没渲染出来
+    graphic: list.length ? [] : [{
+      type: 'text', left: 'center', top: 'middle', silent: true,
+      style: { text: '近 30 分钟窗口内暂无播放事件', fill: '#4b5867', fontSize: 12 }
+    }]
+  }, { replaceMerge: ['graphic'] });
+}
+
+// 曲风配色：蓝主色 + 低饱和邻近色，整体像一组「同一套色板」而不是糖果树。
+// 后面留足备选 —— 万一维表扩了曲风，颜色不会不够用。
+const GENRE_COLOR = ['#4c8dff', '#2fb0a8', '#d8a13c', '#6b7ce0', '#c76b8a', '#5f7d99', '#8fa3b8'];
+
+function renderGenres(rows, span) {
+  const list = (rows || []).filter(r => Number(r.cnt) > 0);
+  const total = list.reduce((s, r) => s + Number(r.cnt), 0);
+  const spanTxt = span === 10 ? '近 10 分钟' : '最近完整窗口';
+  document.getElementById('genre-sub').textContent =
+    total ? `${spanTxt} · ${fmt(total)} 次播放` : '近 10 分钟 · 无数据';
+
+  const ctr = document.getElementById('genre-center');
+  if (!total) {
+    genreChart.clear();
+    if (ctr) ctr.innerHTML = '';
+    genreChart.setOption({
+      title: { text: '暂无播放', left: 'center', top: 'middle',
+               textStyle: { color: C.ink3, fontSize: 12, fontWeight: 400 } }
+    });
+    return;
+  }
+  const top = list[0];
+  genreChart.setOption({
+    color: GENRE_COLOR,
+    tooltip: { ...TOOLTIP, trigger: 'item',
+               formatter: p => `${p.name}<br/>${fmt(p.value)} 次播放 · ${p.percent}%` },
+    legend: {
+      type: 'scroll', orient: 'vertical', right: 4, top: 'middle',
+      itemWidth: 8, itemHeight: 8, itemGap: 8,
+      textStyle: { color: C.ink2, fontSize: 11 },
+      formatter: name => {
+        const it = list.find(r => r.name === name);
+        return `${name}  ${it ? (it.cnt / total * 100).toFixed(1) : 0}%`;
+      }
+    },
+    series: [{
+      type: 'pie', radius: ['54%', '76%'], center: ['32%', '50%'],
+      avoidLabelOverlap: true, label: { show: false }, labelLine: { show: false },
+      itemStyle: { borderColor: C.panel, borderWidth: 2 },
+      data: list.map(r => ({ name: r.name, value: Number(r.cnt) }))
+    }]
+  }, true);
+
+  // 圆心放「份额最大的曲风 + 占比」，比放总播放量更有信息量 ——
+  // 这个面板要回答的就是「此刻大家在听什么类型」。
+  if (ctr) {
+    ctr.style.left = '32%';
+    ctr.style.top = '50%';
+    ctr.innerHTML = `<div class="n">${top.name}</div>`
+                  + `<div class="s">${(Number(top.cnt) / total * 100).toFixed(0)}% 播放</div>`;
+  }
+}
+
+// 商业化：只读 ADS（ads_commercial_daily / ads_sku_daily），不在前端算任何口径。
+const SKU_LABEL = {
+  vip_month: '月卡', vip_quarter: '季卡', vip_year: '年卡',
+  song_single: '单曲', digital_album: '数字专辑'
+};
+
+function renderBiz(b) {
+  const g = document.getElementById('biz-grid');
+  const has = b && (b.pay_order_cnt || 0) > 0;
+  document.getElementById('biz-sub').textContent =
+    has ? `今日 · ${b.pay_order_cnt} 笔支付订单` : '今日暂无订单（等新事件进来）';
+
+  const cell = (k, v, cls) => `<div class="stat"><div class="k">${k}</div><div class="v ${cls||''}">${v}</div></div>`;
+  const money = v => (v === null || v === undefined) ? '—' : '¥' + fmt(Math.round(v));
+  // 收入做成主指标（大字号）：这是领导第一眼看的东西，
+  // 之前把它塞在底部 150px 的面板里，字小到看不清 —— 信息层级本身错了。
+  g.innerHTML =
+    `<div class="biz-hero">
+       <div class="k">今日净收入</div>
+       <div class="v">${money(b && b.net_revenue)}</div>
+       <div class="sub">收入 ${money(b && b.revenue)} − 退款 ${money(b && b.refund_amt)}</div>
+     </div>` +
+    cell('付费用户', has ? fmt(b.pay_user_cnt) : '—', 'blue') +
+    cell('ARPPU', (b && b.arppu != null) ? '¥' + Number(b.arppu).toFixed(1) : '—', '') +
+    cell('付费率', (b && b.pay_rate != null) ? b.pay_rate.toFixed(2) + '%' : '—', 'amber') +
+    cell('支付订单', has ? fmt(b.pay_order_cnt) : '—', '');
+
+  // SKU 销售用柱状图（订单数），比一排细进度条更容易比较高低。
+  const skus = (b && b.skus) || [];
+  if (!skus.length) { skuChart.clear(); return; }
+  skuChart.setOption({
+    grid: { left: 8, right: 8, top: 24, bottom: 6, containLabel: true },
+    tooltip: { ...TOOLTIP, trigger: 'axis', axisPointer: { type: 'shadow' },
+               formatter: ps => {
+                 const i = ps[0].dataIndex, s = skus[i];
+                 return `${SKU_LABEL[s.sku_id] || s.sku_id}<br/>订单 ${fmt(s.order_cnt)} 笔<br/>收入 ¥${fmt(s.revenue)}`;
+               } },
+    xAxis: { type: 'category', data: skus.map(s => SKU_LABEL[s.sku_id] || s.sku_id),
+             ...AXIS_LINE, axisTick: { show: false },
+             axisLabel: { color: C.ink3, fontSize: 10.5 } },
+    yAxis: { type: 'value', splitNumber: 3, ...AXIS_LINE,
+             axisLabel: { ...AXIS_LABEL, fontSize: 10 },
+             splitLine: { show: true, ...SPLIT } },
+    series: [{
+      type: 'bar', barMaxWidth: 26,
+      data: skus.map(s => Number(s.order_cnt) || 0),
+      itemStyle: {
+        borderRadius: [3, 3, 0, 0],
+        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+          { offset: 0, color: '#5b95f5' }, { offset: 1, color: 'rgba(76,141,255,.2)' }])
+      },
+      label: { show: true, position: 'top', color: C.ink2, fontSize: 10,
+               formatter: p => fmt(p.value) }
+    }]
+  }, true);
+}
+
+function renderSession(s) {
+  const g = document.getElementById('session-grid');
+  if (!s || !(s.session_cnt)) {
+    g.innerHTML = '<div class="stat"><div class="k">暂无会话数据</div><div class="v">—</div></div>';
+    document.getElementById('session-sub').textContent = '近 10 分钟 · 滚动';
+    return;
+  }
+  const num = v => (v === null || v === undefined) ? '—' : fmt(v);
+  const pct = v => (v === null || v === undefined) ? '—' : v.toFixed(1) + '%';
+  document.getElementById('session-sub').textContent =
+    `近 10 分钟 · ${num(s.session_cnt)} 次会话`;
+  // 三格：会话数 / 人均事件数 / 跳出率。
+  // 「人均事件数」比「会话时长」更可靠 —— 时长依赖事件时间戳的推进，
+  // 而事件数是 session 归并的固有属性，造假也造不出破绽。
+  g.innerHTML =
+    `<div class="stat"><div class="k">会话数</div><div class="v blue">${num(s.session_cnt)}</div></div>` +
+    `<div class="stat"><div class="k">人均事件</div><div class="v">${num(s.avg_evts_per_sess)}</div></div>` +
+    `<div class="stat"><div class="k">跳出率</div><div class="v amber">${pct(s.bounce_rate)}</div></div>`;
+}
+
+function renderUsers(u, q) {
+  const g = document.getElementById('user-grid');
+  if (!u || !u.dev_cnt) {
+    g.innerHTML = '<div class="stat"><div class="k">暂无用户数据</div><div class="v">—</div></div>';
+    osChart.clear();
+    return;
+  }
+  const pct = v => (v === null || v === undefined) ? '—' : v.toFixed(1) + '%';
+  const num = v => (v === null || v === undefined) ? '—' : fmt(v);
+  document.getElementById('user-sub').textContent = `近 10 分钟 · ${fmt(u.dev_cnt)} 台设备`;
+  const er = q && q.error_rate;
+  // 六个格分成两组：上行是「比例」，下行是「设备构成」。
+  // 下行三格相加 = dev_cnt（新 + 老 + 游客），这是面板能被一眼算平的关键；
+  // 原来这里是「新用户 / 老用户 / 登录用户」，登录用户恰好等于新+老，等于同一份信息显示两遍。
+  g.innerHTML =
+    `<div class="stat"><div class="k">登录率</div><div class="v blue">${pct(u.login_rate)}</div></div>` +
+    `<div class="stat"><div class="k">VIP 占比</div><div class="v amber">${pct(u.vip_rate)}</div></div>` +
+    `<div class="stat"><div class="k">播放失败率</div><div class="v ${er > 1 ? 'red' : ''}">${er != null ? er.toFixed(2) + '%' : '—'}</div></div>` +
+    `<div class="stat"><div class="k">新用户</div><div class="v green">${num(u.new_user)}</div></div>` +
+    `<div class="stat"><div class="k">回访用户</div><div class="v">${num(u.old_user)}</div></div>` +
+    `<div class="stat"><div class="k">游客</div><div class="v grey">${num(u.guest_user)}</div></div>`;
+
+  // OS 占比用饼图：3~4 个分类比长短条更直观。
+  const os = u.os || [];
+  const total = os.reduce((s, x) => s + Number(x.cnt), 0) || 1;
+  const icon = { android: 'Android', ios: 'iOS', web: 'Web', car: '车机', harmony: 'HarmonyOS' };
+  osChart.setOption({
+    color: [C.accent, '#2fb0a8', C.warn, '#6b7ce0'],
+    tooltip: { ...TOOLTIP, trigger: 'item',
+               formatter: p => `${p.name}<br/>${fmt(p.value)} 台 · ${p.percent}%` },
+    legend: { orient: 'vertical', right: 2, top: 'middle', itemWidth: 8, itemHeight: 8,
+              itemGap: 8, textStyle: { color: C.ink2, fontSize: 11 },
+              formatter: name => {
+                const it = os.find(x => (icon[x.name] || x.name) === name);
+                return `${name}  ${it ? (it.cnt / total * 100).toFixed(0) : 0}%`;
+              } },
+    series: [{
+      type: 'pie', radius: ['40%', '62%'], center: ['34%', '50%'],
+      label: { show: false }, labelLine: { show: false },
+      itemStyle: { borderColor: C.panel, borderWidth: 2 },
+      data: os.map(x => ({ name: icon[x.name] || x.name || '未知', value: Number(x.cnt) }))
+    }]
+  }, true);
+}
+
+function renderRank(rows, win) {
+  const list = rows || [];
+  const max = Math.max(...list.map(r => r.play_cnt), 1);
+  document.getElementById('rank-sub').textContent =
+    win ? `${win} · 每分钟滚动` : '近 10 分钟滚动 · 每分钟更新';
+  document.getElementById('rank-list').innerHTML = list.map((r, i) => {
+    const no = i + 1;
+    const cls = no <= 3 ? 't' + no : '';
+    const w = Math.max(3, r.play_cnt / max * 100);
+    return `<div class="rank-row">
+      <span class="rank-no ${cls}">${no}</span>
+      <span class="rank-song">${r.song_name || r.song_id}${r.artist_name ? ` <span class="ag">${r.artist_name}</span>` : ''}
+        <div class="rank-bar" style="width:${w}%"></div>
+      </span>
+      <span class="rank-cnt">${fmt(r.play_cnt)}</span>
+    </div>`;
+  }).join('') || '<div style="color:#5c6878;font-size:12px;">暂无数据</div>';
+}
+
+// 链路健康：把 ops_ 三张表的结论翻译成人话。
+// 关键设计：level 不是「猜」出来的，是后端按「采集器新鲜度 → 作业状态 → 延迟阈值」
+// 三级判出来的。采集器停了就显示「未知」，绝不显示「正常」。
+function renderHealth(h) {
+  if (!h) return;
+  const wrap = document.getElementById('hb-state-wrap');
+  const dot = document.getElementById('hb-dot');
+  wrap.className = h.level || 'unknown';
+  dot.className = 'dot ' + (h.level === 'ok' ? '' : (h.level || 'unknown'));
+  document.getElementById('hb-state').textContent = h.state || '未知';
+
+  const lag = h.lag || {};
+  const sec = v => (v === null || v === undefined) ? '—' : `${v}s`;
+  // 顶部只放「真延迟」：ODS 是入仓到落库，DWD 是清洗完落库，两者越小越好。
+  // DWS / ADS 是窗口表，它们的「秒数」等于「距最近一个窗口右边界过去了多久」，
+  // 天然在 0~60s 锯齿波动（每分钟关一个窗口），放在顶部会被误读成延迟变差，
+  // 所以折进 title，需要细节时鼠标悬停看。
+  const latEl = document.getElementById('hb-lat');
+  if (h.idle) {
+    // 无数据输入时 lag 会随时间单调增长，它衡量「多久没新数据」而不是「处理变慢」，
+    // 显示成 372s 会被误读成故障，所以空闲时直接置空。
+    latEl.innerHTML = `DWD 延迟 <b>—</b>`;
+    latEl.title = '当前无数据输入。DWD 延迟 = now - 最新入仓时间，没有新数据时会自然变大，不代表处理变慢。';
+  } else {
+    latEl.innerHTML = `DWD 延迟 <b>${sec(lag.dwd)}</b>`;
+    latEl.title = `ODS 落地 ${sec(lag.ods)} / DWD 落地 ${sec(lag.dwd)}\n`
+                + `DWS 窗口滞后 ${sec(lag.dws)} / ADS 窗口滞后 ${sec(lag.ads)}\n`
+                + `（DWS 为 1/5 分钟窗口，正常 0~60s 锯齿；`
+                + `ADS 为 10 分钟窗口，正常 0~660s 锯齿 —— 窗口要等右边界越过才关闭）`;
+  }
+
+  const rate = h.input_rate;
+  const rateEl = document.getElementById('hb-rate');
+  rateEl.innerHTML =
+    `入口 <b>${(rate === null || rate === undefined) ? '—' : rate.toFixed(1)}</b> 条/s`;
+  // 悬停看真实积压：Kafka consumer lag 才是「还有多少行没处理」，
+  // 顶栏的 DWD 延迟只反映「最新一行多旧」，B 一边写旧数据一边刷新它，检测不到积压。
+  const kl = h.kafka_lag;
+  rateEl.title = (kl === null || kl === undefined)
+    ? 'Kafka 消费积压：暂无采样（采集器连不上 Kafka 时为 —）'
+    : `Kafka 消费积压 ${kl} 行（ods_music_event 待作业 B 消费的消息数）`;
+
+  // 今日累计处理量：口径是 ODS 全量入口行数（不是 DWD 七表之和，那个是分流结果）。
+  // 上万以后用「万条」，避免顶栏出现一长串数字挤掉别的指标。
+  const vol = h.processed_today;
+  let volTxt = '—';
+  if (vol !== null && vol !== undefined) {
+    volTxt = vol >= 10000 ? `${(vol / 10000).toFixed(1)} 万条` : `${vol} 条`;
+  }
+  const volEl = document.getElementById('hb-vol');
+  volEl.innerHTML = `今日处理 <b>${volTxt}</b>`;
+  volEl.title = `今日累计入口事件数（10 张明细表 + 异常表 + 兜底表之和；`
+              + `实时 ODS 就是 Kafka topic，Doris 侧没有 ODS 表可数）`;
+
+  const q = h.quality || {};
+  const er = q.error_rate;
+  // 异常率长期在 2~4%，超过 10% 说明规则或链路出问题了，标红提示
+  const erCls = (er !== null && er !== undefined && er > 10) ? 'style="color:#e5534b"' : '';
+  document.getElementById('hb-err').innerHTML =
+    `异常率 <b ${erCls}>${(er === null || er === undefined) ? '—' : er.toFixed(2) + '%'}</b>`;
+
+  // 上游重报率：埋点客户端重试造成的重复上报，聚合层用 COUNT(DISTINCT event_id) 消除。
+  // 这是业务事实而非故障，所以用中性色，超过 5% 才提示（说明客户端重试策略有问题）。
+  const dr = h.dup_rate;
+  const drCls = (dr !== null && dr !== undefined && dr > 5) ? 'style="color:#d8a13c"' : '';
+  document.getElementById('hb-dup').innerHTML =
+    `重报率 <b ${drCls}>${(dr === null || dr === undefined) ? '—' : dr.toFixed(2) + '%'}</b>`;
+}
+
+// 内容与互动四联：推荐 CTR / 互动率 / 搜索转化 / 今日成单。
+// 这四个指标在实时层只有明细表、没有 DWS，后端现算 + 60 秒缓存后整块返回，
+// 前端只做格式化（比例保留一位、金额取整），不在这里做任何算术 ——
+// 口径一旦分散到前端，就会出现「大屏和接口两个版本」的老问题。
+function renderContent(c) {
+  const box = document.getElementById('content-cards');
+  if (!c) { box.innerHTML = ''; return; }
+  const rec = c.recommend || {}, soc = c.social || {}, se = c.search || {}, od = c.order || {};
+  const p1 = v => (v === null || v === undefined) ? '—' : Number(v).toFixed(1);
+  const money = v => (v === null || v === undefined) ? '—' : fmt(Math.round(v));
+  document.getElementById('content-sub').textContent =
+    `今日累计 · ${fmt(soc.start)} 次起播`;
+
+  box.innerHTML =
+    `<div class="ccard">
+       <div class="k">推荐点击率 CTR</div>
+       <div class="v ${rec.ctr != null && rec.ctr >= 15 ? 'green' : ''}">${p1(rec.ctr)}<small>%</small></div>
+       <div class="d">曝光 <b>${fmt(rec.imp)}</b> → 点击 <b>${fmt(rec.clk)}</b></div>
+     </div>` +
+    `<div class="ccard">
+       <div class="k">互动率（收藏 / 分享 / 点赞）</div>
+       <div class="v blue">${p1(soc.collect_rate)}<small>% 收藏</small></div>
+       <div class="d">分享 <b>${p1(soc.share_rate)}%</b> · 点赞 <b>${p1(soc.like_rate)}%</b>（点赞分母为点击）</div>
+     </div>` +
+    `<div class="ccard">
+       <div class="k">搜索转化</div>
+       <div class="v">${fmt(se.cnt)}<small>次</small></div>
+       <div class="d">点击率 <b>${p1(se.click_rate)}%</b> · 平均 <b>${p1(se.avg_results)}</b> 条结果</div>
+     </div>` +
+    // 成交额用「今日明细口径」，与上方「今日商业化」的批式日表不是同一份数据
+    // （那是离线全量、这是实时链路，且一个是净收入、一个是成交额），
+    // 所以主数字给"单量"、标题写"明细口径"，避免同屏出现两个像"今日净收入"的指标互相打脸。
+    `<div class="ccard">
+       <div class="k">实时成单（明细口径）</div>
+       <div class="v red">${fmt(od.pay_cnt)}<small>单</small></div>
+       <div class="d">成交 ¥${money(od.gmv)} · 退款 <b>${fmt(od.refund_cnt)}</b> 单 · 近 10 分钟 <b>${fmt(od.rt_cnt)}</b> 单</div>
+     </div>`;
+}
+
+async function load() {
+  try {
+    const d = await (await fetch('/api/all')).json();
+    renderKpi(d.overview, d.active);
+    renderTrend(d.trend);
+    renderGenres(d.genres, d.genres_span);
+    renderBiz(d.biz);
+    renderUsers(d.users, d.client_quality);
+    renderSession(d.session);
+    renderRank(d.rank, d.rank_window);
+    renderMap(d.province, d.province_window);
+    renderContent(d.content);
+    renderHealth(d.health);
+    document.getElementById('refresh-info').textContent =
+      d.last_refresh ? `数据时间 ${d.last_refresh}` : '等待数据…';
+  } catch (e) {
+    document.getElementById('refresh-info').textContent = '连接失败，重试中';
+    document.getElementById('hb-state').textContent = '连接失败';
+    document.getElementById('hb-state-wrap').className = 'bad';
+  }
+}
+
+setInterval(() => {
+  document.getElementById('clock').textContent =
+    new Date().toLocaleTimeString('zh-CN', { hour12: false });
+}, 1000);
+
+window.addEventListener('resize', () => {
+  [mapChart, trendChart, genreChart, skuChart, osChart].forEach(c => c.resize());
+});
+
+// 只在 window.resize 上重绘是不够的：面板内部布局变了（数字区从 4 格变 6 格、
+// 图例换行、行高由 grid 重新分配）窗口尺寸却不变，此时 canvas 仍是旧尺寸，会溢出面板。
+// ResizeObserver 盯住每个图表容器本身，尺寸一变就重算 —— 这是 ECharts 官方推荐做法。
+if (window.ResizeObserver) {
+  [[mapChart, 'map-chart'], [trendChart, 'trend-chart'], [genreChart, 'genre-chart'],
+   [skuChart, 'sku-chart'], [osChart, 'os-chart']].forEach(([inst, id]) => {
+    const el = document.getElementById(id);
+    if (el) new ResizeObserver(() => inst.resize()).observe(el);
+  });
+}
+
+fetch('/static/china.json')
+  .then(r => r.json())
+  .then(geo => {
+    echarts.registerMap('china', geo);
+    load();
+    // 轮询 10 秒（原 5 秒）。dim_user 从 3 千涨到 10 万后，/api/all 里用户结构那条
+    // 要 join 10 万行维表，5 秒一次等于持续往 Doris 打重查询 —— 监控系统自己成了
+    // 被监控系统的负载。10 秒对「实时大屏」的观感几乎无差别，查询压力却直接减半。
+    setInterval(load, 10000);
+  })
+  .catch(() => {
+    document.getElementById('refresh-info').textContent = '地图数据加载失败';
+  });
+</script>
+</body>
+</html>

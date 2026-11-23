@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "updated": "2026-11-07",
+
+  "_note": [
+    "实时 gen_music_data.py 与离线 gen_offline_ods.py 共读此文件，目的不是省代码，",
+    "而是让「两侧分布一致」成为结构上的必然 —— 以前是靠人工在两处各调一遍参数，",
+    "改了一边忘了另一边就会漂移（v6 那次曲风与完播率的伪相关就是这么来的）。",
+    "events 的值是「每会话期望条数」：离线侧可直接当条数用，实时侧按总和归一化成抽样权重。"
+  ],
+
+  "impression_per_session": 25,
+  "click_per_session": 5,
+  "song_per_session": 5,
+
+  "zipf_alpha_song": 0.6,
+  "zipf_alpha_user": 0.7,
+
+  "events": {
+    "app_launch": 1,
+    "app_exit": 1,
+
+    "impression": 25,
+    "click": 5,
+
+    "play_start": 5,
+    "play_end": 3.5,
+    "skip": 1.5,
+    "pause": 1,
+    "resume": 0.9,
+    "seek": 0.6,
+    "play_error": 0.01,
+
+    "collect": 0.8,
+    "like": 1.2,
+    "share": 0.5,
+    "comment": 0.2,
+    "download": 0.4,
+    "follow_artist": 0.15,
+    "playlist_add": 0.6,
+
+    "search": 0.5,
+    "search_click": 0.35,
+
+    "ad_impression": 3,
+    "ad_click": 0.09,
+
+    "vip_subscribe": 0.16,
+    "order_pay": 0.24,
+    "order_refund": 0.012,
+
+    "page_view": 3
+  },
+
+  "profiles": {
+    "mini": [
+      "app_launch", "app_exit",
+      "impression", "click",
+      "play_start", "play_end", "skip",
+      "collect", "like", "share"
+    ],
+    "full": ["*"]
+  },
+
+  "_derived": {
+    "event_type_count": 26,
+    "full_events_per_session": 55.712,
+    "mini_events_per_session": 44.5,
+    "ctr": 0.2,
+    "skip_rate": 0.3,
+    "note": "ctr = click / impression = 5/25；skip_rate = skip / (play_end + skip) = 1.5/5"
+  }
+}

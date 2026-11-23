@@ -1,0 +1,38 @@
+{
+ "generated_at": "2026-11-14T13:01:08",
+ "cases": 115,
+ "k": 4,
+ "metric": "recall@k over tables referenced by baseline SQL",
+ "results": [
+  {
+   "name": "BM25（现状）",
+   "recall": 28.7,
+   "mrr": 0.193,
+   "ms": 0.07
+  },
+  {
+   "name": "稠密(LSA) 单路",
+   "recall": 24.3,
+   "mrr": 0.168,
+   "ms": 0.2
+  },
+  {
+   "name": "BM25 + rerank",
+   "recall": 28.7,
+   "mrr": 0.184,
+   "ms": 0.24
+  },
+  {
+   "name": "Hybrid α=0.3",
+   "recall": 33.9,
+   "mrr": 0.238,
+   "ms": 0.52
+  },
+  {
+   "name": "vecindex 内 BM25 基线",
+   "recall": 26.1,
+   "mrr": 0.175,
+   "ms": 0.25
+  }
+ ]
+}

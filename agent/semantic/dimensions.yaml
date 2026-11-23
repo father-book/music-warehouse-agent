@@ -1,0 +1,155 @@
+# =============================================================================
+# dimensions.yaml —— 维度语义层
+#
+# 只列**已验证**的维度：cardinality 与实际取值来自 2026-11-09 重造后的实测，
+# 不是设计稿上的预期值。设计值与实测值不一致的地方全部标了 notes。
+# =============================================================================
+version: 1
+verified_at: "2026-11-09"
+
+dimensions:
+
+  dt:
+    name_cn: 日期
+    field: dt
+    type: string
+    format: "yyyy-MM-dd"
+    role: partition
+    cardinality: 35
+    range: ["2026-10-05", "2026-11-08"]
+    tables: [ods_music_event, dwd_play_start, dwd_play_end, dws_user_daily, ads_daily_overview]
+    notes:
+      - "全库统一用字符串分区列 dt，不是 DATE 类型；与实时侧 Doris 的 dt DATE 不同，跨链路对比要显式转换"
+      - "ads_user_retention 没有 dt 分区，用 cohort_date（见该维度）"
+    enrich: "dim_date 可派生 day_of_week / week_of_year / month / quarter / year / is_weekend"
+
+  province:
+    name_cn: 省份
+    field: province
+    type: string
+    cardinality: 31
+    tables: [dwd_play_start, dim_user, dws_province_daily, ads_province_dist]
+    notes:
+      - "事件表有 31 个取值，dim_user 只有 28 个 —— 两者不能混用，见 glossary.traps.province_dup"
+      - "省份是**事件级**字段，同一用户一天内可能出现在多个省，分省 DAU 求和会大于全站 DAU"
+    caution: "分组求和类指标（如分省 DAU 合计）不可当作全站值"
+
+  city:
+    name_cn: 城市
+    field: city
+    type: string
+    cardinality: 68
+    tables: [dim_user, dws_province_daily]
+    notes:
+      - "dim_user 68 个城市；dws_province_daily 每天 78 个「省×市」组合，说明存在跨省同名城市"
+      - "dws_province_daily.city 无空值，每一行都是具体的市，不存在省级汇总行"
+
+  genre:
+    name_cn: 曲风
+    field: genre
+    type: string
+    cardinality: 4
+    values:
+      流行: 856
+      摇滚: 330
+      民谣: 240
+      R&B: 60
+    tables: [dim_song, dws_genre_daily, ads_genre_dist, ads_song_ranking]
+    notes:
+      - "只有 4 类，属于人工收窄的分类，不是真实曲库的曲风分布"
+      - "values 是**曲目数**，不是播放占比；播放占比看 ads_genre_dist.start_share"
+
+  song_id:
+    name_cn: 歌曲
+    field: song_id
+    type: string
+    cardinality: 1486
+    tables: [dim_song, dwd_play_start, dws_song_play_daily, ads_song_ranking]
+    notes:
+      - "存在**两套编码**（数字 ID / MusicBrainz MBID），JOIN dim_song 必须兼容两套，否则曲风与榜单 100% 落空（护栏 R14）"
+      - "曲库 1486 首，来自 MusicBrainz 抓取"
+
+  singer:
+    name_cn: 歌手
+    field: singer
+    type: string
+    cardinality: 50
+    tables: [dim_song, ads_song_ranking]
+
+  os:
+    name_cn: 操作系统
+    field: os
+    type: string
+    cardinality: 4
+    tables: [dwd_play_start, dwd_session]
+
+  network:
+    name_cn: 网络类型
+    field: network
+    type: string
+    cardinality: 4
+    tables: [dwd_play_start]
+
+  channel:
+    name_cn: 渠道
+    field: channel
+    type: string
+    cardinality: 5
+    tables: [dwd_play_start, dwd_session]
+
+  app_version:
+    name_cn: 客户端版本
+    field: app_version
+    type: string
+    cardinality: 4
+    tables: [dwd_play_start, dwd_session, dim_user]
+
+  is_vip:
+    name_cn: 会员标识
+    field: is_vip
+    type: string
+    cardinality: 2
+    values: ["true", "false"]
+    tables: [dwd_play_start, dim_user]
+    notes:
+      - "是**字符串** 'true'/'false'，不是 BOOLEAN；写 is_vip = 1 或 = TRUE 会静默返回空集"
+
+  is_login:
+    name_cn: 登录标识
+    field: is_login
+    type: string
+    cardinality: 2
+    values: ["true", "false"]
+    tables: [dwd_play_start, dwd_session]
+    notes:
+      - "同样是字符串；'false' 的行 user_id 通常为空或为设备号"
+
+  position:
+    name_cn: 推荐坑位
+    field: position
+    type: int
+    cardinality: 25
+    range: [0, 24]
+    tables: [dwd_impression, dwd_click]
+    notes:
+      - "0 号位最优，随坑位后移点击率衰减；ctr_by_position 就是按本维度下钻"
+
+  day_n:
+    name_cn: 留存第 N 日
+    field: day_n
+    type: int
+    cardinality: 7
+    range: [1, 7]
+    tables: [ads_user_retention]
+    notes:
+      - "day_n=1 是次日留存；不要把 day_n 当日期，也不要把 0 当次日"
+
+  cohort_date:
+    name_cn: 同期群日期
+    field: cohort_date
+    type: string
+    format: "yyyy-MM-dd"
+    cardinality: 34
+    tables: [ads_user_retention]
+    notes:
+      - "是用户**首次活跃日**，不是统计日；ads_user_retention 靠它而不是 dt 定位"

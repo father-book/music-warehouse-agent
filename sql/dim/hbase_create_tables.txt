@@ -1,0 +1,21 @@
+# =============================================================================
+# HBase DIM 层物理建表（在 WWC162 上执行）
+#   hbase shell ./hbase_create_tables.txt
+#
+# 说明：
+#   1. Flink 的 hbase-2.2 sink 只做 put，不会自动建表，必须先建好物理表。
+#   2. 6 张表统一用单列族 cf。RowKey 由 Flink SQL 装载时计算，
+#      格式 md5(业务ID)[0:2] + "_" + 业务ID，这里不预分区。
+#   3. 单 RegionServer 下预分区没有收益；散列前缀是为将来扩多 RS 保留的设计。
+#   4. 若提示 TableAlreadyExists（重跑），先在 shell 里 disable + drop 对应表，
+#      或执行：disable_all 'dim_.*' / drop_all 'dim_.*'（注意别误删业务表）。
+# =============================================================================
+
+create 'dim_song', 'cf'
+create 'dim_artist', 'cf'
+create 'dim_album', 'cf'
+create 'dim_playlist', 'cf'
+create 'dim_playlist_song', 'cf'
+create 'dim_user', 'cf'
+
+list

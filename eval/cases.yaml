@@ -1,0 +1,1069 @@
+# =============================================================================
+# E 阶段评测集（P1-8）
+#
+# 期望值来源（**不是拍脑袋写的**）：
+#   · 单日 11-08：code/ground_truth_independent.py --only doris --window
+#                 2026-11-08 2026-11-08（按 metrics.yaml 的 formula 独立重算）
+#   · 多日窗口 / 维度基数：2026-11-09 在 hive_catalog.music_dw 上独立 SQL 实测
+#   · 注意 docs/32 那 47 个值是 **35 天窗口**，不能直接拿来当单日 expected。
+#
+# 三类题：
+#   value   必须算出数，按 tolerance 比对
+#   refuse  必须拒答，且理由含 expect_reason
+#   stub    用 stub 模式跳过 LLM，专门验「护栏确实拦得住」（零 token）
+#
+# 拒答题刻意覆盖 D 阶段新增的 realtime / empty / truncated 三类边界，
+# 以及 C 阶段修复闭环不该放行的跨 catalog、SCD2 扇出、写操作。
+# =============================================================================
+version: 1
+verified_at: "2026-11-09"
+data_window: ["2026-10-05", "2026-11-08"]
+clock: "fixed@2026-11-09"
+
+defaults:
+  tolerance: 0
+  extract: first        # first = rows[0][0]；row_count = 结果行数
+
+# 覆盖矩阵（eval/matrix.py 读这里）。
+# 每个业务意图 ≥ N 条，且跨 ≥ M 个业务域——两个维度缺一不可：
+# 5 条全挤在一个域里，说明只在一个场景下验过。横切意图不进矩阵。
+coverage:
+  default_min: 5
+  default_domains: 2
+  # 成本闸（AC-17）与注入对抗同类：衡量的是"边界守不守得住"，不是"业务答得对不对"
+  cross_cut_intents: [越权, 写操作, 闲聊, 注入对抗, 口径解释, 成本闸]
+  intents:
+    - 单表指标
+    - 分布
+    - 对比
+    - 趋势
+    - 排名
+    - 归因
+    - 多表JOIN
+    - 占比
+    - 口径歧义
+    - 时间歧义
+    - 时间比较
+    - 明细列举
+  overrides:
+    明细列举: {min: 3, domains: 2}   # 明细类问法本身少，3 条足以验"不聚合"
+    时间比较: {min: 3, domains: 2}   # 需要跨窗口，先按 3 条起步
+    口径歧义: {min: 4, domains: 2}
+    单表指标: {min: 8, domains: 3}   # 基础能力，样本要厚
+
+cases:
+
+  # ---------------------------------------------------------------- 数值 · 单日核心
+  - id: V01
+    type: value
+    domain: 用户增长
+    intent: 单表指标
+    question: "2026-11-08 的 DAU 是多少"
+    expected: 3237
+    tags: [单日, 核心指标, 去重口径]
+
+  - id: V02
+    type: value
+    domain: 用户增长
+    intent: 单表指标
+    question: "11-08 活跃用户数"
+    expected: 3237
+    tags: [单日, 同义词]
+
+  - id: V03
+    type: value
+    domain: 内容消费
+    intent: 单表指标
+    question: "2026-11-08 的播放量"
+    expected: 12710
+    tags: [单日, 核心指标]
+
+  - id: V04
+    type: value
+    domain: 内容消费
+    intent: 单表指标
+    question: "11-08 完播次数"
+    expected: 6537
+    tags: [单日]
+
+  - id: V05
+    type: value
+    domain: 内容消费
+    intent: 单表指标
+    question: "11-08 播放结束次数"
+    expected: 8905
+    tags: [单日]
+
+  - id: V06
+    type: value
+    domain: 互动
+    intent: 单表指标
+    question: "11-08 收藏次数"
+    expected: 1013
+    tags: [单日, 互动]
+
+  - id: V07
+    type: value
+    domain: 互动
+    intent: 单表指标
+    question: "11-08 点赞次数"
+    expected: 1493
+    tags: [单日, 互动]
+
+  - id: V08
+    type: value
+    domain: 互动
+    intent: 单表指标
+    question: "11-08 分享次数"
+    expected: 1265
+    tags: [单日, 互动]
+
+  - id: V09
+    type: value
+    domain: 互动
+    intent: 单表指标
+    question: "11-08 互动次数"
+    expected: 9705
+    tags: [单日, 互动, 完整口径]
+
+  - id: V10
+    type: value
+    domain: 内容消费
+    intent: 单表指标
+    question: "11-08 搜索次数"
+    expected: 1285
+    tags: [单日]
+
+  - id: V11
+    type: value
+    domain: 商业化
+    intent: 单表指标
+    question: "11-08 收入金额"
+    expected: 24183
+    tags: [单日, 收入口径, 历史bug]
+    note: "曾漏算 vip_subscribe，导致所有金额指标低 5.24 倍"
+
+  - id: V12
+    type: value
+    domain: 商业化
+    intent: 单表指标
+    question: "11-08 付费用户数"
+    expected: 906
+    tags: [单日, 去重口径]
+
+  - id: V13
+    type: value
+    domain: 商业化
+    intent: 单表指标
+    question: "11-08 退款笔数"
+    expected: 26
+    tags: [单日]
+
+  - id: V14
+    type: value
+    domain: 商业化
+    intent: 单表指标
+    question: "11-08 广告曝光次数"
+    expected: 7626
+    tags: [单日]
+
+  - id: V15
+    type: value
+    domain: 用户增长
+    intent: 单表指标
+    question: "11-08 会话数"
+    expected: 3270
+    tags: [单日]
+
+  - id: V16
+    type: value
+    domain: 内容消费
+    intent: 占比
+    question: "11-08 完播率"
+    expected: 0.5143
+    tolerance: 0.002
+    tags: [单日, 比率, 不可加]
+
+  - id: V17
+    type: value
+    domain: 内容消费
+    intent: 占比
+    question: "11-08 人均播放次数"
+    expected: 3.9265
+    tolerance: 0.02
+    tags: [单日, 比率]
+
+  - id: V18
+    type: value
+    domain: 商业化
+    intent: 占比
+    question: "11-08 ARPU"
+    expected: 7.4708
+    tolerance: 0.05
+    tags: [单日, 比率, 人日陷阱]
+
+  # ---------------------------------------------------------------- 数值 · 时间能力（D 阶段）
+  - id: V19
+    type: value
+    domain: 时间语义
+    intent: 时间歧义
+    question: "昨天播放量是多少"
+    expected: 12710
+    tags: [相对时间, 新鲜度]
+
+  - id: V20
+    type: value
+    domain: 时间语义
+    intent: 时间歧义
+    question: "2026-11-07 的 DAU"
+    expected: 3235
+    tags: [显式日期]
+
+  - id: V21
+    type: value
+    domain: 时间语义
+    intent: 趋势
+    question: "最近7天的播放量"
+    expected: 76630
+    tags: [多日窗口, 裁剪, BETWEEN]
+    sql_contains: ["BETWEEN", "2026-11-03", "2026-11-08"]
+
+  - id: V22
+    type: value
+    domain: 时间语义
+    intent: 趋势
+    question: "上周的播放量"
+    expected: 89250
+    tags: [多日窗口, ISO周]
+
+  - id: V23
+    type: value
+    domain: 时间语义
+    intent: 趋势
+    question: "上个月的播放量"
+    expected: 343965
+    tags: [多日窗口, 裁剪, 人日陷阱]
+    sql_contains: ["BETWEEN", "2026-10-05", "2026-10-31"]
+
+  # ---------------------------------------------------------------- 数值 · 维度与明细
+  - id: V24
+    type: value
+    domain: 用户增长
+    intent: 单表指标
+    question: "2026-11-08 各省份的活跃用户数"
+    extract: row_count
+    expected: 31
+    tags: [维度, 明细题]
+
+  - id: V25
+    type: value
+    domain: 内容消费
+    intent: 多表JOIN
+    question: "11-08 按曲风统计播放量"
+    extract: row_count
+    expected: 4
+    tags: [维度, 曲风]
+
+  - id: V26
+    type: value
+    domain: 用户增长
+    intent: 单表指标
+    question: "11-08 有哪些用户启动了 App"
+    extract: row_count
+    expected_min: 1
+    sql_contains: ["LIMIT"]
+    tags: [明细题, 列举型]
+
+  # 2026-11-09 用户前端实测截图补：这一问曾连续 3 轮 REJECT 后拒答。
+  # 正确链路是首版触发 R16（游客实体）→ 机械修复成 COALESCE(...) → pass。
+  - id: V27
+    type: value
+    domain: 商业化
+    intent: 单表指标
+    question: "昨天一共有多少人退款了"
+    expected: 26
+    tags: [单日, 相对时间, 修复闭环, 用户实测]
+    note: "截图里 3 轮 reject 拒答的那一问，固化成回归用例"
+
+  # 2026-11-09 用户前端实测截图补：「消费最多的用户」被答成播放次数 TOP1
+  # （dwd_play_start COUNT(*) = 2,360），护栏 20 条全放行——语义错但语法对。
+  - id: V28
+    type: value
+    domain: 商业化
+    intent: 排名
+    question: "昨天消费最多的用户是谁"
+    extract: row_count
+    expected: 1
+    sql_contains: ["DWD_PAY", "SUM", "GROUP BY"]
+    sql_not_contains: ["DWD_PLAY_START", "PLAY_CNT"]
+    tags: [商业化, 语义歧义, 用户实测]
+    note: "消费 = 付费金额，不是播歌/收听次数"
+
+  - id: V29
+    type: value
+    domain: 商业化
+    intent: 单表指标
+    question: "昨天消费金额是多少"
+    expected: 25582
+    tags: [商业化, 语义歧义]
+    note: "毛额口径 gross_revenue 单日值；净收入 revenue_sum 是 24,183"
+
+  # ---------------------------------------------------------------- 拒答 · 时间边界
+  - id: R01
+    type: refuse
+    domain: 边界与安全
+    intent: 时间歧义
+    question: "今天 DAU 多少"
+    expect_reason: "实时链路"
+    tags: [实时, 零LLM]
+
+  - id: R02
+    type: refuse
+    domain: 边界与安全
+    intent: 时间歧义
+    question: "最近一小时播放量"
+    expect_reason: "实时链路"
+    tags: [实时, 零LLM]
+
+  - id: R03
+    type: refuse
+    domain: 边界与安全
+    intent: 时间歧义
+    question: "当前在线用户数"
+    expect_reason: "实时链路"
+    tags: [实时, 零LLM]
+
+  - id: R04
+    type: refuse
+    domain: 边界与安全
+    intent: 时间歧义
+    question: "2026-12-01 的播放量"
+    expect_reason: "完全没有数据"
+    tags: [超范围, 零LLM]
+
+  - id: R05
+    type: refuse
+    domain: 边界与安全
+    intent: 时间歧义
+    question: "2025年1月 的收入"
+    expect_reason: "完全没有数据"
+    tags: [超范围, 零LLM]
+
+  - id: R06
+    type: refuse
+    domain: 边界与安全
+    intent: 时间歧义
+    question: "2027年3月 的播放量"
+    expect_reason: "完全没有数据"
+    tags: [超范围, 零LLM]
+
+  - id: R07
+    type: refuse
+    domain: 边界与安全
+    intent: 时间歧义
+    question: "2026-11-09 的 DAU"
+    expect_reason: "完全没有数据"
+    tags: [超范围, 零LLM]
+
+  # ---------------------------------------------------------------- 拒答 · 护栏（stub 模式，零 token）
+  - id: R08
+    type: refuse
+    domain: 边界与安全
+    intent: 越权
+    question: "跨 catalog 查询"
+    mode: stub
+    sql: "SELECT COUNT(*) AS c FROM internal.music_dw.dwd_play_start WHERE dt = '2026-11-08'"
+    expect_reason: "R17"
+    tags: [护栏, R17, 零LLM]
+
+  - id: R09
+    type: refuse
+    domain: 边界与安全
+    intent: 越权
+    question: "分省用户数（未收敛 SCD2）"
+    mode: stub
+    sql: "SELECT u.province, COUNT(*) AS c FROM dwd_session s JOIN dim_user u ON s.user_id = u.user_id WHERE s.dt = '2026-11-08' GROUP BY u.province"
+    expect_reason: "R18"
+    tags: [护栏, R18, 零LLM]
+
+  - id: R10
+    type: refuse
+    domain: 边界与安全
+    intent: 写操作
+    question: "删除数据"
+    mode: stub
+    sql: "DELETE FROM dwd_session WHERE dt = '2026-11-08'"
+    expect_reason: "R1"
+    tags: [护栏, 写操作, 零LLM]
+
+  # ---------------------------------------------------------------- 元问题（不生成 SQL）
+  # 用户实测批评「超出特定逻辑就什么也答不了」。这三条验证能力自述、口径解释
+  # 和通用回答都能给出像样的答案，而不是硬编一条 SELECT 再报 Unknown column。
+  - id: M01
+    type: meta
+    domain: 元问题
+    intent: 闲聊
+    question: "你能做什么"
+    expect_text: "我能查什么"
+    tags: [元问题, 能力自述, 零LLM]
+
+  - id: M02
+    type: meta
+    domain: 元问题
+    intent: 口径歧义
+    question: "DAU 是什么"
+    expect_text: "公式"
+    tags: [元问题, 口径解释, 零LLM]
+
+  - id: M03
+    type: meta
+    domain: 元问题
+    intent: 闲聊
+    question: "你能帮我用 tensorflow 吗"
+    expect_text: "未查询数仓"
+    tags: [元问题, 通用回答]
+
+  # ================================================================
+  # 阶段 2 新增：覆盖矩阵缺口补充
+  # 期望值全部由 `SELECT ... FROM hive_catalog.music_dw` 独立手写 SQL
+  # 在 2026-11-10 实测得到，**不来自 Agent 输出**。
+  # ================================================================
+
+  # ------------------------------------------------ 对比（原本 0 条）
+  - id: N01
+    type: value
+    domain: 用户增长
+    intent: 对比
+    question: "2026-11-08 的 DAU 比 11-07 多了多少"
+    # 阶段 4：SQL 只查当前窗口（3237），差值由 execute 复算基线（3235）后得出。
+    expected: 3237
+    compare_delta: 2
+    tags: [对比, 差值]
+
+  - id: N02
+    type: value
+    domain: 内容消费
+    intent: 对比
+    question: "11-08 的播放量比 11-07 少了多少"
+    expected: 12710
+    compare_delta: -105
+    tags: [对比, 差值]
+
+  # ------------------------------------------------ 排名
+  - id: N03
+    type: value
+    domain: 内容消费
+    intent: 排名
+    question: "2026-11-08 播放量最高的那首歌有多少次播放"
+    col: 1
+    expected: 264
+    tags: [排名, TopN]
+
+  - id: N04
+    type: value
+    domain: 内容消费
+    intent: 排名
+    question: "2026-11-08 播放量前三名是哪几首歌"
+    extract: row_count
+    expected: 3
+    tags: [排名, TopN, 列举型]
+
+  # ------------------------------------------------ 占比
+  - id: N05
+    type: value
+    domain: 商业化
+    intent: 占比
+    question: "2026-11-08 付费用户占比是多少"
+    # 期望 = pay_uv(11-08, 按 event_name 口径) 906 / DAU 3237 = 0.2799
+    # 注意：不加 event_name 过滤会得到 926，比值 0.286——第一版期望就是这么写错的。
+    # 口径以 metrics.yaml 的 pay_uv.filter 为准，不以"跑得通的 SQL"为准。
+    expected: 0.2799
+    tolerance: 0.003
+    tags: [占比, 比率]
+
+  # ------------------------------------------------ 多表 JOIN
+  - id: N06
+    type: value
+    domain: 内容消费
+    intent: 多表JOIN
+    question: "2026-11-08 有播放记录的曲风有几个"
+    expected: 4
+    tags: [多表JOIN, 曲风]
+
+  # ------------------------------------------------ 归因（贡献度）
+  - id: N07
+    type: value
+    domain: 内容消费
+    intent: 归因
+    question: "2026-11-08 播放量最高的曲风贡献了多少次播放"
+    col: 1
+    expected: 7372
+    tags: [归因, 曲风]
+
+  # ------------------------------------------------ 时间歧义
+  - id: N08
+    type: value
+    domain: 时间语义
+    intent: 时间歧义
+    question: "上上周的播放量"
+    expected: 89125
+    tags: [时间歧义, 多日窗口, ISO周]
+    sql_contains: ["BETWEEN", "2026-10-26", "2026-11-01"]
+
+  # ================================================================
+  # C 系列（阶段 3）：覆盖矩阵补全
+  #
+  # 阶段 2 结束时 12 个业务意图里只有 3 个达标（单表/越权/时间歧义），
+  # 归因 1 条、分布 0 条、时间比较 0 条——通过率好看但覆盖很薄。
+  # 这一组按 eval/matrix.py 的缺口逐格补，期望值全部来自独立 SQL 实测
+  # （eval/probe_expected.py 可复跑），不来自 Agent 自己的输出。
+  # ================================================================
+
+  # ------------------------------------------------ 对比（补齐到 5）
+  - id: C01
+    type: value
+    domain: 互动
+    intent: 对比
+    question: "2026-11-08 的互动次数比 11-07 少了多少"
+    # 9705（11-08） vs 9846（11-07），差 -141（少了 141）
+    expected: 9705
+    compare_delta: -141
+    sql_contains: ["DWD_INTERACTION"]
+    tags: [对比, 差值, 互动]
+
+  - id: C02
+    type: value
+    domain: 商业化
+    intent: 对比
+    question: "11-08 的收入比 11-07 少了多少"
+    # 净收入 24183 vs 25846，差 -1663
+    expected: 24183
+    compare_delta: -1663
+    tags: [对比, 差值, 收入口径]
+
+  - id: C03
+    type: value
+    domain: 内容消费
+    intent: 对比
+    question: "11-08 的完播次数比播放结束次数少了多少"
+    # play_end: end_reason='natural' 6537 vs 全部 8905，差 2368
+    expected: 2368
+    sql_contains: ["DWD_PLAY_END"]
+    tags: [对比, 差值, 同表异口径]
+
+  # ------------------------------------------------ 趋势（补齐到 5）
+  - id: C04
+    type: value
+    domain: 用户增长
+    intent: 趋势
+    question: "最近7天 DAU 的走势"
+    # 「最近 7 天」含当天 11-09，裁剪到数据末尾后是 11-03~11-08，共 6 个分区。
+    # 第一版期望写成 7（按 11-02~11-08 数），是**期望值算错**而不是模型答错——
+    # 探针口径必须和 timeparse 的窗口定义一致，否则补题会补出假红。
+    extract: row_count
+    expected: 6
+    sql_contains: ["GROUP BY", "DT"]
+    tags: [趋势, 序列, 逐日]
+
+  - id: C05
+    type: value
+    domain: 商业化
+    intent: 趋势
+    question: "11-01 到 11-08 每天的收入是多少"
+    extract: row_count
+    expected: 8
+    sql_contains: ["GROUP BY", "DT"]
+    tags: [趋势, 序列, 显式区间]
+
+  # ------------------------------------------------ 排名（补齐到 5）
+  - id: C06
+    type: value
+    domain: 内容消费
+    intent: 排名
+    question: "11-08 播放量前五的歌曲"
+    extract: row_count
+    expected: 5
+    sql_contains: ["ORDER BY", "LIMIT"]
+    tags: [排名, TopN, 名次数]
+
+  - id: C07
+    type: value
+    domain: 用户增长
+    intent: 排名
+    question: "11-08 活跃用户数最高的三个省份"
+    # 广东 289 / 河南 234 / 山东 221（按 SUM(dau) 分组）
+    extract: row_count
+    expected: 3
+    sql_contains: ["ORDER BY", "LIMIT", "GROUP BY"]
+    tags: [排名, TopN, 省份]
+
+  # ------------------------------------------------ 分布（新类，5 条）
+  - id: C08
+    type: value
+    domain: 内容消费
+    intent: 分布
+    question: "11-08 各曲风的播放量"
+    # 流行 7372 / 摇滚 2904 / 民谣 1989 / R&B 445
+    col: 1
+    expected: 7372
+    sql_contains: ["GROUP BY", "ORDER BY"]
+    tags: [分布, 曲风, 多行]
+
+  - id: C09
+    type: value
+    domain: 用户增长
+    intent: 分布
+    question: "11-08 各省份的播放量"
+    extract: row_count
+    expected: 31
+    sql_contains: ["GROUP BY"]
+    tags: [分布, 省份, 多行]
+
+  - id: C10
+    type: value
+    domain: 用户增长
+    intent: 分布
+    question: "11-08 各操作系统的活跃用户数"
+    # android 1410 / ios 925 / car 466 / web 465
+    col: 1
+    expected: 1410
+    sql_contains: ["GROUP BY", "ORDER BY"]
+    tags: [分布, OS, 多行]
+
+  - id: C11
+    type: value
+    domain: 内容消费
+    intent: 分布
+    question: "11-08 各网络类型的播放量"
+    # 4g 4170 / wifi 4070 / 5g 2245 / 3g 2225
+    col: 1
+    expected: 4170
+    sql_contains: ["GROUP BY", "ORDER BY"]
+    tags: [分布, 网络, 多行]
+
+  - id: C12
+    type: value
+    domain: 内容消费
+    intent: 分布
+    question: "11-08 各曲风的平均播放进度"
+    # 按播放量加权重算：R&B 0.9338 / 流行 0.9337 / 民谣 0.9330 / 摇滚 0.9306
+    col: 1
+    expected: 0.9338
+    tolerance: 0.002
+    sql_contains: ["GROUP BY"]
+    tags: [分布, 加权平均, 曲风]
+
+  # ------------------------------------------------ 归因（补齐到 5）
+  - id: C13
+    type: value
+    domain: 内容消费
+    intent: 归因
+    question: "11-08 播放量最高的省份贡献了多少次播放"
+    # 广东 1150
+    col: 1
+    expected: 1150
+    tags: [归因, 贡献度, 省份]
+
+  - id: C14
+    type: value
+    domain: 内容消费
+    intent: 归因
+    question: "11-08 完播率最高的曲风，它的完播率是多少"
+    # 民谣 6537... 实际 complete/play = 0.5299
+    col: 1
+    expected: 0.5299
+    tolerance: 0.002
+    sql_contains: ["ORDER BY", "LIMIT"]
+    tags: [归因, 最值, 比率]
+
+  - id: C15
+    type: value
+    domain: 内容消费
+    intent: 归因
+    question: "11-08 播放量最高的省份占全站的多少"
+    # 1150 / 12710 = 0.0905
+    expected: 0.0905
+    tolerance: 0.002
+    tags: [归因, 占比, 贡献度]
+
+  # ------------------------------------------------ 多表 JOIN（补齐到 5）
+  - id: C16
+    type: value
+    domain: 内容消费
+    intent: 多表JOIN
+    question: "11-08 周杰倫的歌一共被播放了多少次"
+    # dws_song_play_daily JOIN dim_song，singer='周杰倫' → 469
+    expected: 469
+    sql_contains: ["DIM_SONG", "JOIN"]
+    tags: [多表JOIN, 歌手, 曲库]
+
+  - id: C17
+    type: value
+    domain: 内容消费
+    intent: 多表JOIN
+    question: "11-08 有多少位歌手的歌被播放过"
+    expected: 50
+    sql_contains: ["DIM_SONG", "JOIN"]
+    tags: [多表JOIN, 去重计数]
+
+  - id: C18
+    type: value
+    domain: 内容消费
+    intent: 多表JOIN
+    question: "11-08 民谣曲风有多少首歌被播放过"
+    # 237 首（dim_song.genre='民谣' 且当日 play_start_cnt>0）
+    expected: 237
+    # 2026-11-14 放宽：原来写 ["DIM_SONG", "JOIN"]，但模型有一次写成
+    #   FROM dwd_play_start WHERE song_id IN (SELECT song_id FROM dim_song WHERE genre='民谣')
+    # 数对（237）、也真的读了维表，只是没用 JOIN 关键字。判据应该管"有没有用维表取曲风"，
+    # 不该管写法——否则评的是 SQL 风格不是口径。维表使用由 DIM_SONG 这条覆盖。
+    sql_contains: ["DIM_SONG"]
+    tags: [多表JOIN, 曲风, 曲目数]
+
+  # ------------------------------------------------ 占比（补齐到 5）
+  - id: C19
+    type: value
+    domain: 商业化
+    intent: 占比
+    question: "11-08 的 VIP 用户占比是多少"
+    # vip_user_cnt 317 / dau 3237 = 0.0979
+    expected: 0.0979
+    tolerance: 0.002
+    tags: [占比, VIP, 比率]
+
+  # ------------------------------------------------ 口径歧义（补齐到 4）
+  - id: C20
+    type: value
+    domain: 用户增长
+    intent: 口径歧义
+    question: "11-08 有多少人听了歌"
+    # 播放口径去重用户 2525，不是 DAU 3237（差 22%）
+    expected: 2525
+    tags: [口径歧义, 播放UV, 同名不同义]
+
+  - id: C21
+    type: value
+    domain: 用户增长
+    intent: 口径歧义
+    question: "这35天一共有多少活跃用户"
+    # 窗口去重 23212；逐日 dau 之和是 113131（人日），两者差 4.87 倍
+    expected: 23212
+    tags: [口径歧义, 窗口去重, 人日陷阱]
+
+  - id: C22
+    type: value
+    domain: 用户增长
+    intent: 口径歧义
+    question: "11-08 的用户规模有多大"
+    # 模糊问法，默认按 DAU 口径（app_launch 去重）→ 3237
+    expected: 3237
+    tags: [口径歧义, 模糊问法]
+
+  - id: C23
+    type: value
+    domain: 用户增长
+    intent: 口径歧义
+    question: "11-08 的 DAU 比播放用户数多多少"
+    # 3237 - 2525 = 712，差额是"启动了但没播"的人
+    expected: 712
+    tags: [口径歧义, 对比, 口径差]
+
+  # ------------------------------------------------ 时间比较（新类，3 条）
+  - id: C24
+    type: value
+    domain: 时间语义
+    intent: 时间比较
+    question: "11-08 的播放量比 11-01 多了多少"
+    # 12710 - 12730 = -20（问"多了多少"答负值是正确方向）
+    expected: 12710
+    compare_delta: -20
+    tags: [时间比较, 跨窗口, 差值]
+
+  - id: C25
+    type: value
+    domain: 时间语义
+    intent: 时间比较
+    question: "11-08 的 DAU 比 11-01 多了多少"
+    # 3237 - 3236 = 1
+    expected: 3237
+    compare_delta: 1
+    tags: [时间比较, 跨窗口, 差值]
+
+  - id: C26
+    type: value
+    domain: 时间语义
+    intent: 时间比较
+    question: "11-08 和 11-07 的播放量相差多少"
+    # 「相差」问绝对值：|12710 - 12815| = 105（不带符号）
+    expected: 12710
+    compare_delta: 105
+    tags: [时间比较, 绝对值, 差值]
+
+  # ------------------------------------------------ 明细列举（补齐到 3）
+  - id: C27
+    type: value
+    domain: 内容消费
+    intent: 明细列举
+    question: "11-08 有哪些曲风有播放记录"
+    extract: row_count
+    expected: 4
+    tags: [明细列举, 不聚合]
+
+  - id: C28
+    type: value
+    domain: 用户增长
+    intent: 明细列举
+    question: "11-08 哪些省份的活跃用户数超过 200"
+    # 按省 SUM(dau) 后 >200 的只有 3 个：广东/河南/山东
+    extract: row_count
+    expected: 3
+    tags: [明细列举, 省份, 分组求和]
+
+  # ------------------------------------------------ 缺口第二轮（跨域补齐）
+  - id: C29
+    type: value
+    domain: 商业化
+    intent: 归因
+    question: "11-08 收入最高的省份贡献了多少收入"
+    # 广东 2404（净收入口径）
+    col: 1
+    expected: 2404
+    tags: [归因, 贡献度, 省份]
+
+  - id: C30
+    type: value
+    domain: 互动
+    intent: 多表JOIN
+    question: "11-08 各曲风的互动次数"
+    # dwd_interaction JOIN dim_song：流行 5455 / 摇滚 1982 / 民谣 1511 / R&B 365
+    col: 1
+    expected: 5455
+    sql_contains: ["DIM_SONG", "JOIN"]
+    tags: [多表JOIN, 曲风, 互动]
+
+  - id: C31
+    type: value
+    domain: 商业化
+    intent: 时间比较
+    question: "11-08 的收入比 11-01 多了多少"
+    # 24183 - 23354 = 829
+    expected: 24183
+    compare_delta: 829
+    tags: [时间比较, 跨窗口, 收入口径]
+
+  - id: C32
+    type: value
+    domain: 商业化
+    intent: 明细列举
+    question: "11-08 有哪些支付渠道产生过收入"
+    # 微信支付 / 余额 / 支付宝 / Apple Pay
+    extract: row_count
+    expected: 4
+    tags: [明细列举, 支付渠道]
+
+  # ================================================================
+  # 对比窗口（阶段 4）：差值必须来自系统复算，不是模型自己算的
+  # 期望值由 eval/probe_expected.py 独立 SQL 实测：
+  #   上周(11-02~11-08) 起播 89,250 ｜ 上上周(10-26~11-01) 89,125 ｜ 差 +125
+  #   11-08 DAU 3,237 ｜ 11-01 DAU 3,236 ｜ 差 +1
+  # 注：上面已有 C24/C25/C26/C31 覆盖单日对比，这里只补「窗口对比」与「并列双日期」
+  # 两种新的**问法**，不重复同一组数字。
+  # ================================================================
+
+
+  - id: C34
+    type: value
+    domain: 内容消费
+    intent: 对比
+    question: "上周的播放量相比上上周变化了多少"
+    expected: 89250
+    compare_delta: 125
+    tags: [对比, 周环比, 差值复算]
+
+  - id: C35
+    type: value
+    domain: 用户增长
+    intent: 对比
+    question: "11-01 和 11-08 的 DAU 对比"
+    expected: 3237
+    compare_delta: 1
+    tags: [对比, 并列双日期, 差值复算]
+
+  # ================================================================
+  # 阶段 5：榜单对比 + 答案层断言
+  #
+  # 这两条故意不写 `expected` —— 判据完全在答案正文上。
+  # 榜单对比的"正确答案"不是某个数，而是「谁升谁降、谁掉榜」这几句话；
+  # 用 SQL 返回列去判它，只能判到"榜首播放量"，判不到"名次有没有算对"。
+  #
+  # 期望值由独立 SQL 实测（2026-11-10），与 Agent 输出无关：
+  #   上周(11-02~11-08)      榜首 S000014 = 1994
+  #   上上周(10-26~11-01)    榜首 S000014 = 1997
+  #   S001320  上上周第 11(492) → 上周第 9(512)
+  #   S000447  上上周第 9(541)  → 上周第 10(495)
+  #   S000669  上上周第 10(503) → 上周第 11(455)，掉出前 10
+  #   两周参与排名实体均为 1486
+  # ================================================================
+
+  - id: C37
+    type: value
+    domain: 内容消费
+    intent: 对比
+    question: "上周播放量 Top10 和上上周相比，名次有哪些变化"
+    # 答案层断言：名次表出现了、榜首值对、有人上升 2 位、掉榜被点名。
+    # 刻意**不绑 song_id**：同一个问题，模型这次可能 JOIN 出 song_name、
+    # 下次只给 song_id。断言绑内部标识，换一种（同样正确的）SQL 就会假红——
+    # 这正是旧判据"跟着 SQL 返回形状走"的毛病，不能在新判据里重犯。
+    answer_must:
+      - "名次变化"
+      - {value: 1994, near: 榜首}
+      - "↑2"
+      - "掉出前 10"
+    # 静默降级是这条题最该防的失败：结果表还在、数字也在，
+    # 只有"名次变化"那一节悄悄没了。
+    answer_must_not:
+      - "未自动计算"
+      - "无法做名次对比"
+    tags: [排名, 榜单对比, 名次变化, 答案层]
+
+  - id: C38
+    type: value
+    domain: 用户增长
+    intent: 对比
+    question: "上周播放量最高的 5 个省份，和上上周相比排名有变化吗"
+    # 这一条是"没变化"的样本：前 5 名原封不动，但值都变了。
+    # 只判"名次变化"节出现会漏掉半成品，所以要求统计行与实体名都在——
+    # 实体是「广东省」而不是某个 id，维度类榜单的可读性也一并验了。
+    answer_must:
+      - "名次变化"
+      - "持平"
+      - "广东省"
+    answer_must_not:
+      - "未自动计算"
+      - "无法做名次对比"
+    tags: [对比, 榜单对比, 维度对比, 答案层]
+
+  - id: K01
+    type: value
+    domain: 用户增长
+    intent: 对比
+    question: "2026-11-08 的 DAU 比 11-07 多了多少"
+    # 阶段 6：口径一致性。SQL 里多了一个系统平移不认识的日期写法（YYYYMMDD），
+    # 基线那条 SQL 的这一处不会被改，两边就不再是"同一口径的两个窗口"。
+    # 期望行为是**不给差值**并说明原因——而不是硬算一个偏了味的数。
+    # 这条用固定 SQL + 零 LLM，所以每次跑结果一致：它验的是判断逻辑，不是模型发挥。
+    sql: "SELECT COUNT(DISTINCT user_id) AS c FROM dwd_session WHERE dt = '2026-11-08' AND date_format(dt, '%Y%m%d') = '20261108'"
+    answer_must:
+      - "不给差值"
+    answer_must_not:
+      - "差值 +"
+      - "差值 -"
+    tags: [对比, 口径一致, 零LLM, 答案层]
+
+  - id: K02
+    type: refuse
+    domain: 边界与安全
+    intent: 成本闸
+    question: "2026-11-08 全部事件的条数是多少"
+    # 阶段 8：成本闸（AC-17）。故意写一个"有 dt 但裁不掉分区"的 SQL——
+    # 护栏 R6 是列级存在性检查，看见 dt 就放行；EXPLAIN 才说出真话：
+    # 35/35 个分区、499 万行、202MB。期望是**拦下不执行**并说明原因，
+    # 而不是硬扫一遍再慢慢返回（那既不省成本，也让"闸"名不副实）。
+    # 固定 SQL + 零 LLM，所以每跑一次结果都一样：验的是判据，不是模型发挥。
+    sql: "SELECT COUNT(*) AS c FROM ods_music_event WHERE dt <> '1900-01-01'"
+    expect_reason: "成本闸"
+    answer_must:
+      - "成本闸"
+      - "35/35"
+      - "4,994,396"
+    answer_must_not:
+      - "全部事件的条数是"
+    tags: [边界, 成本闸, 零LLM, 答案层]
+
+
+
+  # ================================================================
+  # 权限矩阵（AC-06）：同一问题不同身份，行/列可见性必须不同
+  # 期望行数由独立 SQL 核算：
+  #   全国有数据省份 31（dwd_session 去重 province）
+  #   华东 7 省市有数据省份 7
+  #   ODS 11-08 行数 142,338
+  # ================================================================
+
+  - id: P01
+    type: value
+    domain: 权限矩阵
+    intent: 越权
+    user: analyst
+    question: "2026-11-08 各省份的活跃用户数"
+    extract: row_count
+    expected: 31
+    tags: [权限矩阵, AC-06]
+
+  - id: P02
+    type: value
+    domain: 权限矩阵
+    intent: 越权
+    user: analyst_east
+    question: "2026-11-08 各省份的活跃用户数"
+    extract: row_count
+    expected: 7
+    tags: [权限矩阵, AC-06, 行级下推]
+
+  - id: P03
+    type: value
+    domain: 权限矩阵
+    intent: 越权
+    user: engineer
+    question: "2026-11-08 ods_music_event 有多少条记录"
+    expected: 142338
+    tags: [权限矩阵, AC-06, ODS]
+
+  - id: P04
+    type: refuse
+    domain: 权限矩阵
+    intent: 越权
+    user: analyst
+    question: "2026-11-08 ods_music_event 有多少条记录"
+    expect_reason: "R21"
+    tags: [权限矩阵, AC-06, 岗位边界]
+
+  - id: P05
+    type: refuse
+    domain: 权限矩阵
+    intent: 越权
+    user: pm
+    question: "（调试）手写查用户标识列"
+    sql: "SELECT user_id, COUNT(*) FROM dwd_session WHERE dt='2026-11-08' GROUP BY user_id"
+    expect_reason: "R22"
+    tags: [权限矩阵, AC-06, 列级]
+
+  - id: P06
+    type: value
+    domain: 权限矩阵
+    intent: 越权
+    user: analyst
+    question: "（调试）同样的列，分析师可以跑"
+    sql: "SELECT user_id FROM dwd_session WHERE dt='2026-11-08' LIMIT 10"
+    extract: row_count
+    expected: 10
+    tags: [权限矩阵, AC-06, 对照组]
+
+  - id: P07
+    type: refuse
+    domain: 权限矩阵
+    intent: 越权
+    user: pm
+    question: "（调试）产品经理手写查明细表"
+    sql: "SELECT COUNT(*) FROM dwd_play_start WHERE dt='2026-11-08'"
+    expect_reason: "R21"
+    tags: [权限矩阵, AC-06, 表级]
+
+  - id: P08
+    type: value
+    domain: 权限矩阵
+    intent: 越权
+    user: pm
+    question: "2026-11-08 的播放量是多少"
+    expected: 12710
+    tags: [权限矩阵, AC-06, 汇总层]

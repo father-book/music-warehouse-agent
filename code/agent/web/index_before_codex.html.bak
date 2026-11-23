@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Data Agent · 问数</title>
+<style>
+:root{
+  --bg:#f4f6f9; --surface:#fff; --surface-2:#fafbfc; --border:#e3e7ed;
+  --text:#1b2430; --muted:#6b7684; --faint:#98a2b3;
+  --primary:#2563eb; --primary-soft:#eff5ff; --primary-line:#c7dbff;
+  --ok:#16a34a; --ok-soft:#eefbf2; --warn:#d97706; --warn-soft:#fff8e8;
+  --err:#dc2626; --err-soft:#fef2f2; --code:#0f172a; --code-text:#dbe6f5;
+  --shadow:0 1px 2px rgba(16,24,40,.04),0 8px 24px rgba(16,24,40,.05);
+  --mono:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);
+  font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+button,input{font-family:inherit}
+button{cursor:pointer}
+a{color:var(--primary)}
+
+/* ---------- header ---------- */
+header{height:64px;background:var(--surface);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:18px;padding:0 24px;position:sticky;top:0;z-index:10}
+.brand{display:flex;align-items:center;gap:11px;font-size:16px;font-weight:650;letter-spacing:.2px}
+.logo{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,#2563eb,#4f8df7);
+  display:grid;place-items:center;color:#fff;font-size:15px;font-weight:700;box-shadow:0 3px 10px rgba(37,99,235,.28)}
+.brand small{display:block;font-size:11px;color:var(--muted);font-weight:400;letter-spacing:0}
+.pills{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}
+.pill{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);
+  background:var(--surface-2);border:1px solid var(--border);border-radius:20px;padding:5px 11px;white-space:nowrap}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--ok)}
+.dot.blue{background:var(--primary)} .dot.amber{background:var(--warn)}
+.dot.red{background:var(--err)}
+
+/* ---------- layout ---------- */
+.layout{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(340px,.85fr);
+  gap:18px;padding:18px 22px 22px;height:calc(100vh - 64px);max-width:1720px;margin:0 auto}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:14px;
+  box-shadow:var(--shadow);display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.panel-head{height:46px;flex:none;display:flex;align-items:center;gap:9px;padding:0 18px;
+  border-bottom:1px solid var(--border);font-size:12.5px;font-weight:650;color:var(--muted);letter-spacing:.3px}
+.panel-head .spacer{margin-left:auto}
+.ghost{background:none;border:1px solid var(--border);border-radius:7px;color:var(--muted);
+  font-size:11.5px;padding:5px 10px}
+.ghost:hover{background:var(--surface-2);color:var(--text)}
+/* 「评测看板」是个链接而不是按钮：它开新页签，不是就地操作。
+   但视觉上要和旁边的按钮一致，否则那一排会突然多出一个蓝色下划线。 */
+a.ghost{display:inline-block;text-decoration:none;line-height:1.35}
+
+/* ---------- chat ---------- */
+.quick{flex:none;padding:12px 18px;display:flex;gap:7px;flex-wrap:wrap;border-bottom:1px solid var(--border)}
+.chip{font-size:11.5px;color:#3a4a5e;background:var(--surface-2);border:1px solid var(--border);
+  border-radius:16px;padding:5px 11px;transition:.15s}
+.chip:hover{border-color:var(--primary-line);background:var(--primary-soft);color:var(--primary)}
+.chip.refuse{border-style:dashed;color:var(--err)}
+#messages{flex:1;overflow-y:auto;padding:20px 22px;scroll-behavior:smooth}
+.empty{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  color:var(--faint);gap:10px;text-align:center}
+.empty .big{font-size:34px;opacity:.35}
+.msg{margin-bottom:20px;animation:fade .25s ease}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.q{display:flex;gap:10px;align-items:flex-start;margin-bottom:10px}
+.q .avatar{width:26px;height:26px;flex:none;border-radius:8px;background:var(--primary-soft);
+  color:var(--primary);display:grid;place-items:center;font-size:12px;font-weight:700}
+.q .txt{background:var(--primary-soft);border:1px solid var(--primary-line);
+  border-radius:4px 11px 11px 11px;padding:8px 13px;font-size:13.5px;color:#20304a}
+
+.card{border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--surface)}
+.card-top{padding:14px 18px;border-bottom:1px solid var(--border);
+  display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.card-top h2{margin:0;font-size:15px;font-weight:650}
+.tag{font-size:10.5px;padding:2px 8px;border-radius:5px;background:var(--surface-2);
+  border:1px solid var(--border);color:var(--muted)}
+.tag.ok{background:var(--ok-soft);border-color:#bbf0ca;color:var(--ok)}
+.tag.err{background:var(--err-soft);border-color:#fecaca;color:var(--err)}
+.card-body{padding:16px 18px}
+.hero{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+.hero-item{background:var(--surface-2);border:1px solid var(--border);border-radius:10px;
+  padding:11px 16px;min-width:132px}
+.hero-item .k{font:11px var(--mono);color:var(--muted);display:block;margin-bottom:3px}
+.hero-item .v{font-size:23px;font-weight:680;letter-spacing:-.5px;font-variant-numeric:tabular-nums}
+.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:9px;margin-bottom:14px}
+table{border-collapse:collapse;width:100%;font-size:12.5px;font-variant-numeric:tabular-nums}
+th{background:var(--surface-2);color:var(--muted);font-weight:600;text-align:left;
+  padding:8px 12px;border-bottom:1px solid var(--border);white-space:nowrap}
+td{padding:7px 12px;border-bottom:1px solid #f0f2f5;white-space:nowrap}
+tr:last-child td{border-bottom:none}
+.meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px;margin-bottom:14px}
+.meta div{background:var(--surface-2);border-radius:8px;padding:9px 11px;font-size:12px}
+.meta b{color:var(--muted);font-weight:600;display:block;font-size:10.5px;letter-spacing:.4px;margin-bottom:2px}
+.note{font-size:12px;padding:9px 12px;border-radius:8px;margin-bottom:10px;line-height:1.55}
+.note.info{background:var(--primary-soft);color:#1e40af;border:1px solid var(--primary-line)}
+.note.warn{background:var(--warn-soft);color:#92400e;border:1px solid #fde4b0}
+.note.err{background:var(--err-soft);color:#991b1b;border:1px solid #fecaca}
+.details-meta{white-space:pre-wrap;line-height:1.8;font-size:13px;color:#374151}
+.details-meta code{background:var(--surface-2);border:1px solid var(--border);
+  border-radius:4px;padding:1px 5px;font:11.5px var(--mono);color:var(--primary)}
+.details-meta b{color:var(--text)}
+.sqlbox{background:var(--code);border-radius:9px;overflow:hidden;margin-top:6px}
+.sqlbox .bar{display:flex;align-items:center;gap:8px;padding:7px 12px;
+  border-bottom:1px solid rgba(255,255,255,.08);color:#8ba0bd;font:11px var(--mono)}
+.sqlbox .bar button{margin-left:auto;background:rgba(255,255,255,.08);border:0;color:#cbd9ea;
+  border-radius:5px;padding:3px 9px;font:10.5px var(--mono)}
+.sqlbox .bar button:hover{background:rgba(255,255,255,.18)}
+pre{margin:0;padding:12px 14px;overflow-x:auto;color:var(--code-text);
+  font:12px/1.65 var(--mono);white-space:pre-wrap;word-break:break-word}
+details.raw{margin-top:10px;font-size:11.5px;color:var(--muted)}
+details.raw summary{cursor:pointer}
+details.raw pre{background:var(--surface-2);color:var(--muted);border:1px solid var(--border);border-radius:7px;margin-top:6px}
+
+.composer{flex:none;border-top:1px solid var(--border);padding:13px 18px;display:flex;gap:10px;background:var(--surface)}
+.composer input{flex:1;border:1px solid var(--border);background:var(--surface-2);border-radius:9px;
+  padding:11px 14px;font-size:13.5px;color:var(--text);outline:none;transition:.15s}
+.composer input:focus{border-color:var(--primary-line);background:#fff;box-shadow:0 0 0 3px rgba(37,99,235,.08)}
+.composer button{border:0;border-radius:9px;background:var(--primary);color:#fff;font-weight:600;
+  font-size:13px;padding:0 20px;transition:.15s}
+.composer button:hover{background:#1d4ed8}
+.composer button:disabled{background:#a9bff0;cursor:not-allowed}
+.thinking{display:flex;align-items:center;gap:9px;color:var(--muted);font-size:12.5px;padding:6px 0}
+.spin{width:13px;height:13px;border:2px solid var(--primary-line);border-top-color:var(--primary);
+  border-radius:50%;animation:rot .7s linear infinite}
+@keyframes rot{to{transform:rotate(360deg)}}
+
+/* ---------- trace ---------- */
+#trace-body{flex:1;overflow-y:auto;padding:16px 18px}
+.trace-empty{color:var(--faint);font-size:12.5px;text-align:center;padding:40px 10px;line-height:1.8}
+.section-title{font-size:10.5px;font-weight:700;letter-spacing:.9px;color:var(--faint);
+  text-transform:uppercase;margin:16px 0 9px}
+.section-title:first-child{margin-top:0}
+.steps{position:relative;padding-left:17px}
+.steps:before{content:"";position:absolute;left:5px;top:6px;bottom:6px;width:1.5px;background:var(--border)}
+.step{position:relative;margin-bottom:9px;background:var(--surface-2);border:1px solid var(--border);
+  border-radius:9px;padding:9px 11px}
+.step:before{content:"";position:absolute;left:-15.5px;top:14px;width:8px;height:8px;border-radius:50%;
+  background:#cbd5e1;border:2px solid var(--surface)}
+.step.ok:before{background:var(--ok)} .step.err:before{background:var(--err)}
+.step.warn:before{background:var(--warn)} .step.info:before{background:var(--primary)}
+.step .h{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--muted)}
+.step .h b{font:600 11px var(--mono);color:var(--text);letter-spacing:.2px}
+.step .h .n{margin-left:auto;font:10.5px var(--mono);color:var(--faint)}
+.step .d{font-size:12px;color:#3c4a5c;margin-top:4px;word-break:break-word;line-height:1.5}
+.step details{margin-top:6px;font-size:11px;color:var(--muted)}
+.step details summary{cursor:pointer}
+.step details pre{background:#fff;border:1px solid var(--border);color:var(--muted);
+  font:10.5px/1.5 var(--mono);padding:8px;margin-top:5px;max-height:220px;overflow:auto}
+.badge{display:inline-block;font:10.5px var(--mono);padding:3px 8px;border-radius:5px;margin:0 5px 5px 0}
+.badge.err{background:var(--err-soft);color:var(--err);border:1px solid #fecaca}
+.badge.warn{background:var(--warn-soft);color:var(--warn);border:1px solid #fde4b0}
+.badge.ok{background:var(--ok-soft);color:var(--ok);border:1px solid #bbf0ca}
+.badge.info{background:var(--primary-soft);color:var(--primary);border:1px solid var(--primary-line)}
+.evol{border:1px solid var(--border);border-radius:9px;overflow:hidden;margin-bottom:8px}
+.evol .eh{background:var(--surface-2);padding:7px 11px;font:10.5px var(--mono);color:var(--muted);
+  border-bottom:1px solid var(--border);display:flex;gap:8px}
+.evol .eh .stage{color:var(--primary)}
+.evol pre{background:var(--code);color:var(--code-text);font:11px/1.55 var(--mono);padding:9px 11px}
+.fixline{font-size:11.5px;color:var(--muted);padding:4px 0 4px 12px;border-left:2px solid var(--primary-line)}
+
+/* ---------- 阶段 1：身份 / 审计 ---------- */
+.who{display:flex;align-items:center;gap:9px;padding-left:14px;border-left:1px solid var(--border);
+  font-size:12px;color:var(--muted);white-space:nowrap}
+.who b{color:var(--text);font-weight:650}
+.who .role{font:10.5px var(--mono);background:var(--primary-soft);color:var(--primary);
+  border:1px solid var(--primary-line);border-radius:5px;padding:2px 6px}
+.who .ghost{padding:4px 9px}
+
+.overlay{position:fixed;inset:0;background:rgba(16,24,40,.46);backdrop-filter:blur(3px);
+  display:grid;place-items:center;z-index:60;padding:20px}
+.overlay[hidden]{display:none}
+.login-card{width:100%;max-width:392px;background:var(--surface);border-radius:16px;
+  box-shadow:0 18px 60px rgba(16,24,40,.24);padding:26px 26px 22px}
+.login-card h1{margin:0 0 4px;font-size:19px;font-weight:680}
+.login-card p.sub{margin:0 0 18px;font-size:12.5px;color:var(--muted);line-height:1.6}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:11.5px;color:var(--muted);margin-bottom:5px;font-weight:600}
+.field input{width:100%;height:38px;border:1px solid var(--border);border-radius:8px;padding:0 11px;
+  font-size:13.5px;color:var(--text);background:var(--surface-2);outline:none}
+.field input:focus{border-color:var(--primary-line);background:#fff;box-shadow:0 0 0 3px var(--primary-soft)}
+.login-card button.primary{width:100%;height:39px;border:0;border-radius:8px;color:#fff;font-size:13.5px;
+  font-weight:600;background:linear-gradient(135deg,#2563eb,#4f8df7);box-shadow:0 4px 14px rgba(37,99,235,.26)}
+.login-card button.primary:disabled{opacity:.6;box-shadow:none;cursor:default}
+.login-err{margin-top:11px;font-size:12px;color:var(--err);background:var(--err-soft);
+  border:1px solid #fecaca;border-radius:7px;padding:8px 10px;line-height:1.5}
+.login-err[hidden]{display:none}
+.accounts{margin-top:16px;padding-top:13px;border-top:1px dashed var(--border);font-size:11.5px;color:var(--faint)}
+
+.audit-wrap{width:100%;max-width:1180px;max-height:86vh;background:var(--surface);border-radius:15px;
+  box-shadow:0 18px 60px rgba(16,24,40,.24);display:flex;flex-direction:column;overflow:hidden}
+.audit-head{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px}
+.audit-head h2{margin:0;font-size:15px;font-weight:670}
+.audit-head .sub{font-size:11.5px;color:var(--muted)}
+.audit-head .spacer{margin-left:auto}
+.audit-body{overflow:auto;padding:14px 20px 20px}
+.stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.stat{flex:1 1 118px;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+.stat .k{font-size:11px;color:var(--muted)}
+.stat .v{font-size:19px;font-weight:670;margin-top:2px;font-variant-numeric:tabular-nums}
+table.audit{width:100%;border-collapse:collapse;font-size:11.8px}
+table.audit th{text-align:left;font-weight:600;color:var(--muted);font-size:11px;padding:7px 9px;
+  border-bottom:1px solid var(--border);background:var(--surface-2);position:sticky;top:0}
+table.audit td{padding:8px 9px;border-bottom:1px solid #eef1f5;vertical-align:top}
+table.audit tr:hover td{background:var(--surface-2)}
+table.audit .mono{font-family:var(--mono);font-size:10.8px;color:var(--muted)}
+.intent{font:10.5px var(--mono);padding:2px 6px;border-radius:5px;border:1px solid}
+.intent.query{color:var(--primary);background:var(--primary-soft);border-color:var(--primary-line)}
+.intent.meta{color:#7c3aed;background:#f5f0ff;border-color:#e2d5ff}
+.intent.refuse{color:var(--err);background:var(--err-soft);border-color:#fecaca}
+.intent.error{color:var(--warn);background:var(--warn-soft);border-color:#fde4b0}
+.audit-q{max-width:330px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+@media(max-width:1000px){
+  .layout{grid-template-columns:1fr;height:auto}
+  .panel{min-height:420px}
+  header{height:auto;padding:12px 16px;flex-wrap:wrap}
+  .pills{margin-left:0;width:100%}
+  .who{border-left:0;padding-left:0}
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="logo">DA</div>
+    <div>Data Agent · 问数
+      <small>LangGraph × 20 条护栏 × 语义层</small></div>
+  </div>
+  <div class="pills" id="pills"></div>
+  <div class="who" id="who" hidden>
+    <span id="who-name">—</span>
+    <span class="role" id="who-role"></span>
+    <button class="ghost" onclick="openAudit()">审计</button>
+    <a class="ghost" href="/eval-history" target="_blank" rel="noopener"
+       title="每次评测的分数与答案层覆盖率趋势">评测看板</a>
+    <button class="ghost" onclick="logout()">退出</button>
+  </div>
+</header>
+
+<!-- 登录前的门：没有会话就看不到问数区，避免"页面上有入口但一提交就 401" -->
+<div class="overlay" id="login-layer">
+  <form class="login-card" onsubmit="doLogin(event)">
+    <h1>登录 · Data Agent 问数</h1>
+    <p class="sub">下面是同一个系统的三个岗位。同一条问题，不同岗位能看到的层级与列不同；同一岗位落在不同片区，能看到的行不同。</p>
+    <div class="field">
+      <label for="u">用户名</label>
+      <input id="u" autocomplete="username" placeholder="analyst / engineer / pm" />
+    </div>
+    <div class="field">
+      <label for="p">密码</label>
+      <input id="p" type="password" autocomplete="current-password" placeholder="Demo@2026" />
+    </div>
+    <button class="primary" id="login-btn" type="submit">登录</button>
+    <div class="login-err" id="login-err" hidden></div>
+    <div class="accounts">
+      演示账号（密码均为 Demo@2026）<br>
+      <b>analyst</b> 数据分析师 · 全国　　　<b>analyst_east</b> 数据分析师 · 华东<br>
+      <b>engineer</b> 数据开发工程师 · 全国　<b>pm</b> 数据产品经理 · 全国<br>
+      <span style="opacity:.75">三个岗位全部只读；差异在可见分层、可见列与取数上限</span>
+    </div>
+  </form>
+</div>
+
+<!-- 审计：只读，数据来自 PostgreSQL 的 qa_logs（库层不可变触发器） -->
+<div class="overlay" id="audit-layer" hidden>
+  <div class="audit-wrap">
+    <div class="audit-head">
+      <h2>审计 · 最近问答</h2>
+      <span class="sub" id="audit-scope"></span>
+      <span class="spacer"></span>
+      <button class="ghost" onclick="loadAudit()">刷新</button>
+      <button class="ghost" onclick="closeAudit()">关闭</button>
+    </div>
+    <div class="audit-body">
+      <div class="stats" id="audit-stats"></div>
+      <div class="note info" id="audit-why" style="margin:10px 0 0"></div>
+      <!-- AC-14：看审计这件事本身也被记。这一行就是证据——
+           谁、什么时候、看了几行；下面还有保留期与不可变触发器的状态。 -->
+      <div class="note info" id="audit-access" style="margin:10px 0 0"></div>
+
+      <!-- 模型网关台账（AC-18/22）：审计说的是"谁问了什么"，
+           台账说的是"这次问了花了多少钱、出去过几次"。同一份证据的两端，
+           放在同一屏才对得上账。 -->
+      <div class="sub" style="margin:14px 0 6px">模型网关 · 近 24 小时</div>
+      <div class="stats" id="gw-stats"></div>
+      <div class="note info" id="gw-note" style="margin:10px 0 0"></div>
+
+      <table class="audit">
+        <thead><tr>
+          <th>时间</th><th>用户 / 角色</th><th>意图</th><th>问题</th>
+          <th>PII</th><th>表</th><th>行数</th><th>耗时</th><th>trace_id</th>
+        </tr></thead>
+        <tbody id="audit-rows"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<main class="layout">
+  <section class="panel">
+    <div class="panel-head">问数
+      <span class="spacer"></span>
+      <button class="ghost" onclick="clearAll()">清空</button>
+    </div>
+    <div class="quick" id="quick"></div>
+    <div id="messages">
+      <div class="empty" id="empty">
+        <div class="big">◇</div>
+        <div>问一个业务问题，答案会带上<b>出处、口径和复算 SQL</b><br>
+        右侧同步展示「生成 → 护栏 → 执行」的每一步</div>
+      </div>
+    </div>
+    <div class="composer">
+      <input id="q" placeholder="例如：2026-11-08 的 DAU 是多少" autocomplete="off" />
+      <button id="send" onclick="send()">发送</button>
+    </div>
+  </section>
+
+  <aside class="panel">
+    <div class="panel-head">
+      <span>Trace · 执行过程</span>
+      <span class="spacer"></span>
+      <span id="trace-stat" style="font-weight:400;color:var(--faint)"></span>
+    </div>
+    <div id="trace-body">
+      <div class="trace-empty">还没有可展示的过程。<br>问一个问题，这里会记录<br>每一次生成、拦截和修正。</div>
+    </div>
+  </aside>
+</main>
+
+<script>
+const QUICK = [
+  ["你能做什么",""],
+  ["2026-11-08 的 DAU 是多少",""],
+  ["最近7天的播放量",""],
+  ["上个月各省份的活跃用户数",""],
+  ["11-08 各省份活跃用户数",""],
+  ["11-08 收入金额",""],
+  ["今天 DAU 多少","refuse"],
+  ["2026-12-01 的播放量","refuse"]
+];
+const $ = s => document.querySelector(s);
+// 数据范围的显示名。新增片区时在这里补一行即可，权限本身由后端 scope_policies 决定。
+const REGION_CN = { all: "全国", east: "华东" };
+let busy = false;
+
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function fmt(v){
+  if(v===null||v===undefined) return "NULL";
+  if(typeof v==="number") return Number.isInteger(v)?v.toLocaleString("zh-CN"):String(+v.toFixed(4));
+  return esc(v);
+}
+function init(){
+  $("#quick").innerHTML = QUICK.map(([q,c])=>`<button class="chip ${c}" onclick="ask('${esc(q)}')">${esc(q)}</button>`).join("");
+  fetch("/api/meta").then(r=>r.json()).then(m=>{
+    $("#pills").innerHTML =
+      pill("blue",`${esc(m.catalog)}.${esc(m.database)}`) +
+      pill("",`数据截止 ${esc(m.data_until)}`) +
+      pill("",`${esc(m.guards)} 条护栏`) +
+      pill("amber",`${esc(m.model)}`);
+  }).catch(()=>{});
+  $("#q").addEventListener("keydown",e=>{if(e.key==="Enter"&&!busy) send()});
+}
+function pill(cls,txt){return `<span class="pill"><i class="dot ${cls}"></i>${txt}</span>`}
+
+/* ---------------- 身份 ---------------- */
+let ME = null;
+function showLogin(msg){
+  $("#login-layer").hidden = false;
+  $("#who").hidden = true;
+  const e=$("#login-err");
+  if(msg){e.textContent=msg;e.hidden=false}else{e.hidden=true}
+  setTimeout(()=>$("#u").focus(),60);
+}
+function hideLogin(){
+  $("#login-layer").hidden = true;
+  $("#who").hidden = false;
+}
+function boot(){
+  init();
+  fetch("/api/me").then(r=>{
+    if(r.status===401){ showLogin(""); return null }
+    return r.json();
+  }).then(d=>{
+    if(!d) return;
+    ME=d;
+    $("#who-name").textContent = d.user.display_name || d.user.username;
+    // 展示"岗位 · 数据范围"，而不是内部角色码——用户看到的词应该和公司里的岗位名一致
+    const scope = d.user.scope_region && d.user.scope_region !== "all"
+      ? (REGION_CN[d.user.scope_region] || d.user.scope_region) : "";
+    $("#who-role").textContent = (d.user.role_name || d.user.role) + (scope ? " · " + scope : "");
+    $("#who-role").title = (d.user.role_description || "") +
+      (d.policy && d.policy.read_only ? "｜只读" : "");
+    hideLogin();
+    refreshCachePill();
+    refreshGatewayPill();
+  }).catch(()=>showLogin("无法连接服务，确认 webapp.py 在运行"));
+}
+/* 缓存后端状态：Redis 还是进程内、有没有降级。
+   降级必须在界面上看得见——静默回落 local 时，"以为共享了其实各存一份"
+   在演示里完全看不出来，在生产上就是缓存穿透。 */
+function refreshCachePill(){
+  fetch("/api/cache").then(r=>r.ok?r.json():null).then(d=>{
+    if(!d) return;
+    const c=d.cache||{}, box=$("#pills");
+    if(!box) return;
+    let el=$("#cache-pill");
+    if(!el){el=document.createElement("span");el.className="pill";el.id="cache-pill";box.appendChild(el)}
+    if(c.degraded){
+      el.innerHTML=`<i class="dot red"></i>缓存降级 · ${esc(c.backend||"local")}`;
+      el.title=c.reason||c.init_warning||"Redis 不可用，已回落进程内缓存";
+    }else{
+      const n=c.backend==="redis"?`${c.size} 键`:`${c.size}/${c.maxsize} 条`;
+      el.innerHTML=`<i class="dot blue"></i>缓存 ${esc(c.backend||"—")} · 命中 ${c.hit_rate==null?0:c.hit_rate}%`;
+      el.title=`${n} ｜ TTL ${c.ttl_sec||"—"}s ｜ 本实例 hit ${c.hit||0} / miss ${c.miss||0}`;
+    }
+  }).catch(()=>{});
+}
+/* 模型网关徽章：今日调用量与成本，出网被拦时变红。
+   "闸装了但从没拦过"和"闸装了个寂寞"在界面上长得一样，所以这里要显示
+   真实计数——0 就是 0，不去猜。 */
+function refreshGatewayPill(){
+  fetch("/api/gateway?days=1").then(r=>r.ok?r.json():null).then(d=>{
+    if(!d) return;
+    const box=$("#pills"); if(!box) return;
+    let el=$("#gw-pill");
+    if(!el){el=document.createElement("span");el.className="pill";el.id="gw-pill";box.appendChild(el)}
+    const t=(d.ledger&&d.ledger.total)||{}, eg=d.egress||{}, C=t.calls||0;
+    const cost=(t.cost_cny||0).toFixed(4);
+    if(eg.blocked>0){
+      el.innerHTML=`<i class="dot red"></i>出网拦截 ${eg.blocked} 次`;
+      el.title=(eg.denied&&eg.denied.length)
+        ? eg.denied.map(x=>`${x.at} ${x.host}:${x.port} · ${x.caller}`).join("\n")
+        : "被拒的外连会记在这里";
+    }else if(d.ledger&&d.ledger.ok===false){
+      el.innerHTML=`<i class="dot red"></i>台账不可读`;
+      el.title=d.ledger.error||"cost_ledger 查询失败";
+    }else{
+      el.innerHTML=`<i class="dot blue"></i>网关 ${C} 调用 · ¥${cost}`;
+      el.title=`失败 ${t.failed||0} ｜ 缓存命中 ${t.cached||0} ｜ 平均 ${t.avg_latency_ms||0}ms ｜ 允许出网 ${(eg.allow_hosts||[]).join(",")||"无"}`;
+    }
+  }).catch(()=>{});
+}
+/* 审计弹窗里的网关那一块：和上面的问答统计对着看，才能对得上账。 */
+function renderGateway(g, box, note){
+  if(!g||!box){return}
+  const t=(g.ledger&&g.ledger.total)||{}, eg=g.egress||{}, lim=g.limits||{};
+  box.innerHTML = statCard("模型调用",t.calls||0)+statCard("失败",t.failed||0)+
+    statCard("缓存命中",t.cached||0)+
+    statCard("平均延迟",(t.avg_latency_ms||0)+" ms")+
+    statCard("成本",`¥${(t.cost_cny||0).toFixed(4)}`)+
+    statCard("出网拦截",eg.blocked||0);
+  const parts=[];
+  parts.push(eg.installed
+    ? `出网闸已启用，白名单：${(eg.allow_hosts||[]).join("、")||"无"}`
+    : `出网闸未启用${eg.reason?"（"+eg.reason+"）":""}`);
+  if(eg.via_proxy) parts.push(`经代理出网 ${eg.via_proxy} 次`);
+  parts.push(`限流 ${lim.max_calls_per_min?lim.max_calls_per_min+" 次/分":"不限"} · 日预算 ${lim.daily_cost_cny?"¥"+lim.daily_cost_cny:"不限"}`);
+  if(g.ledger&&g.ledger.ok===false) parts.push("台账查询失败："+(g.ledger.error||""));
+  note.textContent = parts.join("　｜　");
+  note.classList.toggle("warn", !!(g.ledger&&g.ledger.ok===false));
+}
+function doLogin(ev){
+  ev.preventDefault();
+  const btn=$("#login-btn"), err=$("#login-err");
+  const username=$("#u").value.trim(), password=$("#p").value;
+  if(!username||!password){err.textContent="用户名和密码都要填";err.hidden=false;return}
+  btn.disabled=true; err.hidden=true;
+  fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({username,password})})
+    .then(async r=>{
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error(d.detail||d.error||("登录失败 "+r.status));
+      return d;
+    })
+    .then(()=>{ $("#p").value=""; boot(); })
+    .catch(e=>{err.textContent=e.message;err.hidden=false})
+    .finally(()=>{btn.disabled=false});
+}
+function logout(){
+  fetch("/api/logout",{method:"POST"}).then(()=>{
+    ME=null; clearAll(); showLogin("");
+  });
+}
+
+/* ---------------- 审计 ---------------- */
+function openAudit(){
+  $("#audit-layer").hidden=false;
+  loadAudit();
+}
+function closeAudit(){ $("#audit-layer").hidden=true }
+function loadAudit(){
+  $("#audit-rows").innerHTML=`<tr><td colspan="9" style="color:var(--faint)">加载中…</td></tr>`;
+  Promise.all([
+    fetch("/api/audit?limit=50").then(r=>r.json()),
+    fetch("/api/stats?days=1").then(r=>r.ok?r.json():null).catch(()=>null),
+    fetch("/api/gateway?days=1").then(r=>r.ok?r.json():null).catch(()=>null),
+    fetch("/api/audit/access?limit=5").then(r=>r.ok?r.json():null).catch(()=>null),
+    fetch("/api/audit/retention").then(r=>r.ok?r.json():null).catch(()=>null)
+  ]).then(([a,s,g,acc,ret])=>{
+    $("#audit-scope").textContent = a.scope==="all"
+      ? "范围：全租户（分析师权限）" : "范围：仅本人记录";
+    if(s && !s.error){
+      // 成本与 P95 是阶段 2 才真正有数的：tokens 之前恒为 0，
+      // 因为审计侧在 trace.data 里找的键名和生成节点写的对不上。
+      const cost = (s.cost_cny||0).toFixed(4);
+      const per = (s.cost_per_query||0).toFixed(4);
+      $("#audit-stats").innerHTML =
+        statCard("近 24h 问答",s.total)+statCard("成功率",(s.success_rate||0)+"%" )+
+        statCard("拒答",s.refused)+statCard("P95 耗时",(s.p95_ms||0)+" ms")+
+        statCard("tokens",((s.tokens_in||0)+(s.tokens_out||0)).toLocaleString())+
+        statCard("成本",`¥${cost}（¥${per}/次）`);
+      const tops = s.top_refusals||[];
+      $("#audit-why").innerHTML = tops.length
+        ? "主要拒答原因：" + tops.map(t=>`${esc((t.reason||"").replace(/\s+/g," ").slice(0,26))} ×${t.n}`).join("　｜　")
+        : "";
+    } else {
+      $("#audit-stats").innerHTML = s&&s.detail
+        ? `<div class="note info" style="margin:0">${esc(s.detail)}</div>` : "";
+    }
+    renderGateway(g, $("#gw-stats"), $("#gw-note"));
+
+    // AC-14：这次查询本身有没有被记上 + 谁看过审计 + 保留期状态。
+    // 记失败时明确写出来：静默失败等于"以为记了"。
+    const accRows = (acc && acc.rows) || [];
+    const rt = ret && ret.plan;
+    const bits = [];
+    if (a.access_logged === false) {
+      bits.push(`<span style="color:var(--err)">本次访问未能写入审计访问表：`
+        + `${esc(a.access_error || "未知原因")}</span>`);
+    }
+    bits.push(accRows.length
+      ? "最近查看审计：" + accRows.map(x =>
+          `${esc((x.occurred_at || "").replace("T", " ").slice(5, 16))} `
+          + `${esc(x.user_id)}（${esc(x.action)}${x.rows ? " " + x.rows + " 行" : ""}）`
+        ).join("　｜　")
+      : "还没有其他查看记录。");
+    if (rt) {
+      bits.push(`保留期 ${ret.days} 天：当前将归档 ${rt.rows || 0} 行；`
+        + `不可变触发器${ret.trigger_enabled ? "在岗" : "<span style=\"color:var(--err)\">已关闭（异常）</span>"}`);
+    }
+    $("#audit-access").innerHTML = bits.join("<br>");
+    const rows=a.rows||[];
+    if(!rows.length){
+      $("#audit-rows").innerHTML=`<tr><td colspan="9" style="color:var(--faint)">还没有审计记录。</td></tr>`;
+      return;
+    }
+    $("#audit-rows").innerHTML = rows.map(r=>{
+      const t=(r.occurred_at||"").replace("T"," ").slice(0,19);
+      const tabs=(r.tables||[]).join("、");
+      return `<tr>
+        <td class="mono">${esc(t)}</td>
+        <td>${esc(r.user_id||"—")}<br><span class="mono">${esc(r.role||"")}</span></td>
+        <td><span class="intent ${esc(r.intent)}">${esc(r.intent)}</span></td>
+        <td class="audit-q" title="${esc(r.question||"")}">${esc(r.question||"")}</td>
+        <td>${r.pii_hits
+          ? `<span style="font-size:11px;color:var(--warn)">脱敏 ${r.pii_hits} 处</span>`
+          : "—"}</td>
+        <td class="mono">${esc(tabs||"—")}</td>
+        <td>${r.row_count||0}</td>
+        <td class="mono">${r.elapsed_ms||0} ms</td>
+        <td class="mono">${esc((r.trace_id||"").slice(-13))}</td>
+      </tr>`;
+    }).join("");
+  }).catch(e=>{
+    $("#audit-rows").innerHTML=`<tr><td colspan="9" style="color:var(--err)">读取失败：${esc(e.message)}</td></tr>`;
+  });
+}
+function statCard(k,v){return `<div class="stat"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div></div>`}
+
+function ask(q){$("#q").value=q;send()}
+function clearAll(){
+  $("#messages").innerHTML=`<div class="empty" id="empty"><div class="big">◇</div>
+    <div>问一个业务问题，答案会带上<b>出处、口径和复算 SQL</b><br>右侧同步展示每一步</div></div>`;
+  $("#trace-body").innerHTML=`<div class="trace-empty">还没有可展示的过程。</div>`;
+  $("#trace-stat").textContent="";
+}
+function send(){
+  const q=$("#q").value.trim(); if(!q||busy) return;
+  busy=true; $("#send").disabled=true; $("#empty")?.remove();
+  const box=document.createElement("div"); box.className="msg";
+  box.innerHTML=`<div class="q"><div class="avatar">Q</div><div class="txt">${esc(q)}</div></div>
+    <div id="pending"><div class="thinking"><i class="spin"></i>正在解析时间、检索语义层、生成 SQL…</div></div>`;
+  $("#messages").appendChild(box); $("#pending").scrollIntoView({block:"end"});
+  $("#trace-body").innerHTML=`<div class="thinking"><i class="spin"></i>链路执行中…</div>`;
+
+  fetch("/api/ask",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({question:q})})
+    .then(async r=>{
+      const st=await r.json().catch(()=>({}));
+      if(r.status===401){ showLogin("会话已过期，请重新登录"); throw new Error("unauthorized") }
+      if(r.status===429){ throw new Error(st.error||"配额已用尽，请稍后再试") }
+      if(!r.ok) throw new Error(st.detail||st.error||("请求失败 "+r.status));
+      return st;
+    }).then(st=>{
+      const p=$("#pending"); if(p) p.outerHTML = renderAnswer(st);
+      renderTrace(st);
+      $("#messages").scrollTop=$("#messages").scrollHeight;
+    })
+    .catch(e=>{ const p=$("#pending"); if(p) p.outerHTML=
+      `<div class="note err">${e.message==="unauthorized"?"请先登录。":"请求失败："+esc(e.message)}<br>确认 webapp.py 还在运行、端口没被占用。</div>`; })
+    .finally(()=>{busy=false;$("#send").disabled=false;$("#q").focus()});
+}
+
+function renderAnswer(st){
+  if(st.error) return `<div class="note err">服务异常：${esc(st.error)}</div>`;
+  if(st.meta_answer) return renderMetaAnswer(st);
+  const w=st.time_window||{}, res=st.result||{}, refused=!!st.refused;
+  if(refused){
+    return `<div class="card"><div class="card-top"><h2>答不了这个问题</h2>
+      <span class="tag err">已拒答</span></div><div class="card-body">
+      <div class="note err">${esc(st.refuse_reason||"")}</div>
+      <div class="meta"><div><b>数据范围</b>${esc(w.label||"—")}</div>
+      <div><b>新鲜度</b>${esc(st.freshness||"—")}</div></div>
+      ${rawBlock(st.answer)}</div></div>`;
+  }
+  if(res.error) return `<div class="note err">查询执行失败：${esc(res.error)}</div>`;
+
+  const cols=res.columns||[], rows=res.rows||[];
+  const title=cover(st), metric=(st.metrics||[])[0]||"问数";
+  let hero="";
+  if(rows.length===1&&cols.length){
+    hero=`<div class="hero">`+cols.map((c,i)=>
+      `<div class="hero-item"><span class="k">${esc(c)}</span><div class="v">${fmt(rows[0][i])}</div></div>`).join("")+`</div>`;
+  }
+  let table="";
+  if(rows.length>1&&cols.length){
+    table=`<div class="table-wrap"><table><thead><tr>${cols.map(c=>`<th>${esc(c)}</th>`).join("")}</tr></thead>
+      <tbody>${rows.slice(0,20).map(r=>`<tr>${cols.map((_,i)=>`<td>${fmt(r[i])}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
+      ${rows.length>20?`<div class="note info">只显示前 20 行，共 ${rows.length} 行；完整结果见复算 SQL。</div>`:""}`;
+  }
+  const notes=[];
+  if(w.note) notes.push(`<div class="note warn">${esc(w.note)}</div>`);
+  for(const c of (st.dimension_cautions||[]).slice(0,2))
+    notes.push(`<div class="note warn">维度提示：${esc(c)}</div>`);
+  const warns=(st.findings||[]).filter(f=>f.level==="WARN");
+  for(const f of warns.slice(0,2)) notes.push(`<div class="note warn">${esc(f.message)}</div>`);
+
+  const srcTables=tablesFromSql(st.sql||"");
+  // 阶段 3：答案形态是"我理解你在问什么"的显式声明。
+  // 用户看到「榜单/TopN」就知道系统没有把排行榜当成一个总量来答；
+  // 返工过的会多一个标记，这比在日志里埋一行更可信。
+  const shp=st.shape||{};
+  const shapeTag=shp.label?`<span class="tag">${esc(shp.label)}</span>`:"";
+  const shapeMeta=shp.label?`<div><b>答案形态</b>${esc(shp.label)}${(st.shape_retries||0)?`　<span style="color:var(--warn)">已返工 ${st.shape_retries} 次</span>`:""}</div>`:"";
+  // 缓存命中要说出来：0 token、0 查询是真的，但"这次没真跑"用户有权知道。
+  const cacheTag=st.cache_hit?`<span class="tag">缓存命中</span>`:"";
+  const cacheMeta=st.cache_hit?`<div><b>缓存</b>命中同一问题（0 token / 0 查询），键 ${esc(st.cache_key||"—")}</div>`:"";
+  const cmp=st.compare_result||{};
+  const cmpMeta=(cmp.status==="ok")?`<div><b>对比基线</b>${esc(cmp.base_label||"")} = ${esc((cmp.base_value??0).toLocaleString())}　差值 ${cmp.delta>0?"+":""}${esc((cmp.delta??0).toLocaleString())}${cmp.pct!=null?`（${cmp.pct>0?"+":""}${(cmp.pct*100).toFixed(2)}%）`:""}</div>`
+    :(cmp.status==="unsafe"?`<div><b>对比基线</b><span style="color:var(--warn)">未计算 —— ${esc(cmp.note||"口径不一致")}</span></div>`:"");
+  const meta=`<div class="meta">
+    <div><b>时间窗口</b>${esc(cover(st))}　<span style="color:var(--faint)">${esc(w.status||"")}</span></div>
+    ${cmpMeta}${cacheMeta}
+    <div><b>数据源</b>hive_catalog.music_dw · ${esc(srcTables.join("、")||"—")}</div>
+    <div><b>命中指标</b>${esc((st.metrics||[]).join("、")||"按字面口径生成")}</div>
+    ${shapeMeta}
+    <div><b>新鲜度</b>${esc(st.freshness||"—")}</div>
+    <div><b>护栏</b>${esc(st.verdict||"—")} · ${esc((st.attempts||0)+" 轮")} · ${esc((st.elapsed_ms||0)+" ms")}</div>
+  </div>`;
+  if(st.shape_unresolved && (st.shape_issues||[]).length)
+    notes.push(`<div class="note warn">形态提示：${esc(st.shape_issues[0])}</div>`);
+  return `<div class="card"><div class="card-top">
+      <h2>${esc(title)}</h2><span class="tag ok">${esc(st.verdict||"pass")}</span>
+      <span class="tag">${esc(metric)}</span>${shapeTag}${cacheTag}</div>
+    <div class="card-body">${hero}${table}${notes.join("")}${meta}
+      <div class="section-title">复算 SQL</div>${sqlBox(st.sql||"")}
+      ${rawBlock(st.answer)}</div></div>`;
+}
+function mdText(s){
+  return esc(s||"").replace(/\*\*(.+?)\*\*/g,"<b>$1</b>")
+                    .replace(/`([^`]+)`/g,"<code>$1</code>");
+}
+function renderMetaAnswer(st){
+  const k=(st.meta_intent||{}).kind||"说明";
+  const label={help:"能力说明",explain:"口径解释",offscope:"通用回答"}[k]||k;
+  return `<div class="card"><div class="card-top"><h2>${esc(label)}</h2>
+    <span class="tag info">未查询数仓</span>
+    <span class="tag">${esc(k)}</span></div>
+    <div class="card-body"><div class="details-meta">${mdText(st.answer||"")}</div></div></div>`;
+}
+function cover(st){
+  const a=st.time_start,b=st.time_end;
+  return a&&b?(a===b?a:`${a} ~ ${b}`):"—";
+}
+function tablesFromSql(sql){
+  const out=[],re=/\b(?:FROM|JOIN)\s+([A-Za-z_][\w.]*)/gi;let m;
+  while((m=re.exec(sql))!==null){
+    const t=m[1].split(".").pop();
+    if(t&&!out.includes(t)) out.push(t);
+  }
+  return out;
+}
+function sqlBox(sql){
+  if(!sql) return `<div class="note info">没有生成 SQL（拒答或直连调试）。</div>`;
+  return `<div class="sqlbox"><div class="bar">SQL · Doris(hive_catalog)
+    <button onclick="cp(this)">复制</button></div><pre>${esc(sql)}</pre></div>`;
+}
+function cp(btn){
+  const t=btn.closest(".sqlbox").querySelector("pre").textContent;
+  navigator.clipboard.writeText(t).then(()=>{btn.textContent="已复制";setTimeout(()=>btn.textContent="复制",1400)});
+}
+function rawBlock(txt){
+  return txt?`<details class="raw"><summary>查看纯文本答案</summary><pre>${esc(txt)}</pre></details>`:"";
+}
+
+function renderTrace(st){
+  if(st.error){$("#trace-body").innerHTML=`<div class="note err">${esc(st.error)}</div>`;return;}
+  const steps=st.trace||[], findings=st.findings||[], hist=st.history||[], fixes=st.fix_log||[];
+  $("#trace-stat").textContent=`${steps.length} 步 · ${(st.elapsed_ms||0)} ms`;
+  let h="";
+  // 时间解析摘要
+  const w=st.time_window||{};
+  if(w.label){
+    h+=`<div class="section-title">时间解析</div>
+      <div class="step info"><div class="h"><b>${esc(w.sql_hint||"—")}</b></div>
+      <div class="d">${esc(w.label)}｜状态 ${esc(w.status||"")}${w.requested?`｜原请求 ${esc(w.requested.join(" ~ "))}`:""}</div></div>`;
+  }
+  const mh=(st.metric_hits||[]).map(x=>
+    `<span class="badge ok">${esc(x.matched_by||"")} → ${esc(x.code||"")}</span>`).join("");
+  if((st.dimensions||[]).length || mh){
+    h+=`<div class="section-title">命中维度 / 语义检索</div>
+      <div class="step info">${mh?`<div class="d">${mh}</div>`:""}
+      ${(st.dimensions||[]).length?`<div class="d">维度 ${(st.dimensions||[]).map(x=>`<span class="badge info">${esc(x)}</span>`).join("")}</div>`:""}
+      <div class="d" style="color:var(--faint)">候选表 ${(st.tables||[]).map(esc).join(" · ")||"—"}</div></div>`;
+  }
+  h+=`<div class="section-title">节点执行（${steps.length}）</div><div class="steps">`;
+  steps.forEach((s,i)=>{
+    const cls=classOf(s.node,s.detail);
+    const data=s.data&&Object.keys(s.data).length
+      ?`<details><summary>展开数据</summary><pre>${esc(JSON.stringify(s.data,null,1))}</pre></details>`:"";
+    h+=`<div class="step ${cls}"><div class="h"><b>${esc(s.node)}</b><span class="n">${i+1}</span></div>
+      <div class="d">${esc(s.detail||"")}</div>${data}</div>`;
+  });
+  h+=`</div>`;
+  if(findings.length){
+    h+=`<div class="section-title">护栏结果</div><div>`+findings.map(f=>
+      `<span class="badge ${f.level==="REJECT"?"err":f.level==="WARN"?"warn":"info"}">${esc(f.rule)} · ${esc(f.level)}</span>`).join("")+`</div>`;
+  }
+  const sqls=hist.filter(x=>x.sql);
+  if(sqls.length){
+    h+=`<div class="section-title">SQL 演化（${sqls.length} 版）</div>`;
+    sqls.forEach(x=>{h+=`<div class="evol"><div class="eh"><span class="stage">第 ${esc(x.attempt)} 轮 · ${esc(x.stage)}</span>
+      <span>${esc(x.verdict||"")}</span></div><pre>${esc(x.sql)}</pre></div>`});
+  }
+  if(fixes.length){
+    h+=`<div class="section-title">机械修复动作</div>`+fixes.map(f=>`<div class="fixline">${esc(f)}</div>`).join("");
+  }
+  $("#trace-body").innerHTML=h||`<div class="trace-empty">本次没有产生 trace。</div>`;
+}
+function classOf(node,detail){
+  const s=(node+" "+(detail||"")).toLowerCase();
+  if(/reject|拒答|refuse|error|失败/.test(s)) return "err";
+  if(/warn|截断|truncated/.test(s)) return "warn";
+  if(/pass|通过|已包装|ok/.test(s)) return "ok";
+  return "info";
+}
+boot();
+</script>
+</body>
+</html>

@@ -1,0 +1,50 @@
+{
+ "generated_at": "2026-11-15T11:45:08",
+ "cases": 115,
+ "k": 4,
+ "metric": "recall@k over tables referenced by baseline SQL",
+ "results": [
+  {
+   "name": "BM25（现状）",
+   "recall": 28.7,
+   "mrr": 0.193,
+   "ms": 0.08
+  },
+  {
+   "name": "稠密(LSA) 单路",
+   "recall": 24.3,
+   "mrr": 0.168,
+   "ms": 0.2
+  },
+  {
+   "name": "BM25 + rerank",
+   "recall": 28.7,
+   "mrr": 0.184,
+   "ms": 0.24
+  },
+  {
+   "name": "Hybrid α=0.3",
+   "recall": 47.8,
+   "mrr": 0.338,
+   "ms": 0.51
+  },
+  {
+   "name": "稠密(BGE神经) 单路",
+   "recall": 32.2,
+   "mrr": 0.188,
+   "ms": 7.21
+  },
+  {
+   "name": "Hybrid α=0.3 BGE",
+   "recall": 49.6,
+   "mrr": 0.37,
+   "ms": 7.83
+  },
+  {
+   "name": "vecindex 内 BM25 基线",
+   "recall": 26.1,
+   "mrr": 0.175,
+   "ms": 0.25
+  }
+ ]
+}

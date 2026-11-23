@@ -1,0 +1,2706 @@
+{
+ "db": "music_dw",
+ "tables": {
+  "ods_music_event": {
+   "layer": "ods",
+   "partitioned_by": [
+    "dt"
+   ],
+   "columns": [
+    "event_id",
+    "event_name",
+    "event_time",
+    "server_time",
+    "user_id",
+    "device_id",
+    "is_login",
+    "is_vip",
+    "app_version",
+    "os",
+    "os_version",
+    "device_model",
+    "network",
+    "carrier",
+    "ip",
+    "province",
+    "city",
+    "session_id",
+    "session_seq",
+    "is_foreground",
+    "channel",
+    "page_id",
+    "properties",
+    "etl_time",
+    "dt"
+   ],
+   "types": {
+    "event_id": "STRING",
+    "event_name": "STRING",
+    "event_time": "STRING",
+    "server_time": "STRING",
+    "user_id": "STRING",
+    "device_id": "STRING",
+    "is_login": "STRING",
+    "is_vip": "STRING",
+    "app_version": "STRING",
+    "os": "STRING",
+    "os_version": "STRING",
+    "device_model": "STRING",
+    "network": "STRING",
+    "carrier": "STRING",
+    "ip": "STRING",
+    "province": "STRING",
+    "city": "STRING",
+    "session_id": "STRING",
+    "session_seq": "STRING",
+    "is_foreground": "STRING",
+    "channel": "STRING",
+    "page_id": "STRING",
+    "properties": "STRING",
+    "etl_time": "STRING",
+    "dt": "STRING"
+   },
+   "source": "00_all_ddl.sql",
+   "name_cn": "埋点原始事件",
+   "grain": "一条埋点事件",
+   "pk": "event_id",
+   "rows": 4994396,
+   "catalog": "hive_catalog",
+   "database": "music_dw",
+   "caveats": [
+    "event_time / server_time 是**毫秒字符串**，必须 CAST 后外套 from_utc_timestamp(...,'Asia/Shanghai')，否则整体早 8 小时（docs/25）",
+    "properties 是 JSON 原文，每次查询都要 get_json_object，不要在 ODS 层直接做指标",
+    "province 是**事件级**字段，同一用户一天内可能出现在多个省，见 glossary.traps.province_dup"
+   ],
+   "pk_unique": true,
+   "versions": "none"
+  },
+  "ods_user_change": {
+   "layer": "ods",
+   "partitioned_by": [],
+   "columns": [
+    "user_id",
+    "change_date",
+    "is_vip",
+    "city",
+    "province",
+    "app_version",
+    "os",
+    "device_model",
+    "change_type"
+   ],
+   "types": {
+    "user_id": "STRING",
+    "change_date": "STRING",
+    "is_vip": "STRING",
+    "city": "STRING",
+    "province": "STRING",
+    "app_version": "STRING",
+    "os": "STRING",
+    "device_model": "STRING",
+    "change_type": "STRING"
+   },
+   "source": "00_all_ddl.sql",
+   "name_cn": "用户属性快照",
+   "grain": "一个用户一条属性记录",
+   "pk": "user_id",
+   "rows": 1150000,
+   "catalog": "hive_catalog",
+   "database": "music_dw",
+   "caveats": [
+    "无 dt 分区，是全量快照，不能按天增量取"
+   ],
+   "pk_unique": false,
+   "versions": "changelog"
+  },
+  "dwd_play_start": {
+   "layer": "dwd",
+   "partitioned_by": [
+    "dt"
+   ],
+   "columns": [
+    "event_id",
+    "event_ts",
+    "server_ts",
+    "user_id",
+    "device_id",
+    "is_login",
+    "is_vip",
+    "app_version",
+    "os",
+    "os_version",
+    "device_model",
+    "network",
+    "carrier",
+    "ip",
+    "province",
+    "city",
+    "session_id",
+    "session_seq",
+    "is_foreground",
+    "channel",
+    "page_id",
+    "song_id",
+    "playlist_id",
+    "quality",
+    "play_mode",
+    "song_index",
+    "etl_time",
+    "dt"
+   ],
+   "types": {
+    "event_id": "STRING",
+    "event_ts": "TIMESTAMP",
+    "server_ts": "TIMESTAMP",
+    "user_id": "STRING",
+    "device_id": "STRING",
+    "is_login": "STRING",
+    "is_vip": "STRING",
+    "app_version": "STRING",
+    "os": "STRING",
+    "os_version": "STRING",
+    "device_model": "STRING",
+    "network": "STRING",
+    "carrier": "STRING",
+    "ip": "STRING",
+    "province": "STRING",
+    "city": "STRING",
+    "session_id": "STRING",
+    "session_seq": "STRING",
+    "is_foreground": "STRING",
+    "channel": "STRING",
+    "page_id": "STRING",
+    "song_id": "STRING",
+    "playlist_id": "STRING",
+    "quality": "STRING",
+    "play_mode": "STRING",
+    "song_index": "INT",
+    "etl_time": "TIMESTAMP",
+    "dt": "STRING"
+   },
+   "source": "00_all_ddl.sql",
+   "name_cn": "播放起播明细",
+   "grain": "一次起播",
+   "pk": "event_id",
+   "rows": 445945,
+   "catalog": "hive_catalog",
+   "database": "music_dw",
+   "caveats": [
+    "是**起播**不是播放会话，同一会话可多次起播",
+    "完播率的分母只能用本表，不能用 dwd_play_end（会抬到 73%）"
+   ],
+   "pk_unique": true,
+   "versions": "none"
+  },
+  "dwd_play_end": {
+   "layer": "dwd",
+   "partitioned_by": [
+    "dt"
+   ],
+   "columns": [
+    "event_id",
+    "event_ts",
+    "server_ts",
+    "user_id",
+    "device_id",
+    "is_login",
+    "is_vip",
+    "app_version",
+    "os",
+    "os_version",
+    "device_model",
+    "network",
+    "carrier",
+    "ip",
+    "province",
+    "city",
+    "session_id",
+    "session_seq",
+    "is_foreground",
+    "channel",
+    "page_id",
+    "song_id",
+    "song_duration",
+    "play_duration",
+    "play_progress",
+    "end_reason",
+    "etl_time",
+    "dt"
+   ],
+   "types": {
+    "event_id": "STRING",
+    "event_ts": "TIMESTAMP",
+    "server_ts": "TIMESTAMP",
+    "user_id": "STRING",
+    "device_id": "STRING",
+    "is_login": "STRING",
+    "is_vip": "STRING",
+    "app_version": "STRING",
+    "os": "STRING",
+    "os_version": "STRING",
+    "device_model": "STRING",
+    "network": "STRING",
+    "carrier": "STRING",
+    "ip": "STRING",
+    "province": "STRING",
+    "city": "STRING",
+    "session_id": "STRING",
+    "session_seq": "STRING",
+    "is_foreground": "STRING",
+    "channel": "STRING",
+    "page_id": "STRING",
+    "song_id": "STRING",
+    "song_duration": "INT",
+    "play_duration": "INT",
+    "play_progress": "DOUBLE",
+    "end_reason": "STRING",
+    "etl_time": "TIMESTAMP",
+    "dt": "STRING"
+   },
+   "source": "00_all_ddl.sql",
+   "name_cn": "播放结束明细",
+   "grain": "一次播放结束（播完或中断）",
+   "pk": "event_id",
+   "rows": 312083,
+   "catalog": "hive_catalog",
+   "database": "music_dw",
+   "caveats": [
+    "**不含跳过**（skip 事件不产生 play_end），所以 end < start 是正常的",
+    "play_progress >= 0.9 才算完播；avg_progress 的含义是「播完的那批人平均听了多少」"
+   ],
+   "pk_unique": true,
+   "versions": "none"
+  },
+  "dwd_skip": {
+   "layer": "dwd",
+   "partitioned_by": [
+    "dt"
+   ],
+   "columns": [
+    "event_id",
+    "event_ts",
+    "server_ts",
+    "user_id",
+    "device_id",
+    "is_login",
+    "is_vip",
+    "app_version",
+    "os",
+    "os_version",
+    "device_model",
+    "network",
+    "carrier",
+    "ip",
+    "province",
+    "city",
+    "session_id",
+    "session_seq",
+    "is_foreground",
+    "channel",
+    "page_id",
+    "event_name",
+    "song_id",
+    "played_duration",
+    "skip_type",
+    "properties_raw",
+    "etl_time",
+    "dt"
+   ],
+   "types": {
+    "event_id": "STRING",
+    "event_ts": "TIMESTAMP",
+    "server_ts": "TIMESTAMP",
+    "user_id": "STRING",
+    "device_id": "STRING",
+    "is_login": "STRING",
+    "is_vip": "STRING",
+    "app_version": "STRING",
+    "os": "STRING",
+    "os_version": "STRING",
+    "device_model": "STRING",
+    "network": "STRING",
+    "carrier": "STRING",
+    "ip": "STRING",
+    "province": "STRING",
+    "city": "STRING",
+    "session_id": "STRING",
+    "session_seq": "STRING",
+    "is_foreground": "STRING",
+    "channel": "STRING",
+    "page_id": "STRING",
+    "event_name": "STRING",
+    "song_id": "STRING",
+    "played_duration": "INT",
+    "skip_type": "STRING",
+    "properties_raw": "STRING",
+    "etl_time": "TIMESTAMP",
+    "dt": "STRING"
+   },
+   "source": "11_dwd_domain_tables.sql",
+   "name_cn": "跳过明细",
+   "grain": "一次跳过",
+   "pk": "event_id",
+   "rows": 133862,
+   "catalog": "hive_catalog",
+   "database": "music_dw",
+   "caveats": [
+    "跳过事件没有 play_progress，不能与 play_end 混在一起算平均进度"
+   ],
+   "pk_unique": true,
+   "versions": "none"
+  },
+  "dim_song": {
+   "layer": "dim",
+   "partitioned_by": [],
+   "columns": [
+    "song_id",
+    "song_name",
+    "singer",
+    "genre",
+    "duration",
+    "release_date",
+    "region"
+   ],
+   "types": {
+    "song_id": "STRING",
+    "song_name": "STRING",
+    "singer": "STRING",
+    "genre": "STRING",
+    "duration": "INT",
+    "release_date": "STRING",
+    "region": "STRING"
+   },
+   "source": "00_all_ddl.sql",
+   "name_cn": "歌曲维度",
+   "grain": "一首歌一行",
+   "pk": "song_id",
+   "rows": 1486,
+   "catalog": "hive_catalog",
+   "database": "music_dw",
+   "caveats": [
+    "song_id 存在**两套编码**（数字 ID 与 MusicBrainz MBID），JOIN 必须兼容两套，否则曲风/榜单 100% 落空（docs/24、护栏 R14）",
+    "曲风只有 4 类：流行 856 / 摇滚 330 / 民谣 240 / R&B 60"
+   ],
+   "pk_unique": true,
+   "versions": "none"
+  },
+  "dim_user": {
+   "layer": "dim",
+   "partitioned_by": [],
+   "columns": [
+    "user_id",
+    "is_vip",
+    "city",
+    "province",
+    "app_version",
+    "os",
+    "device_model",
+    "register_date",
+    "start_date",
+    "end_date",
+    "is_current",
+    "change_type"
+   ],
+   "types": {
+    "user_id": "STRING",
+    "is_vip": "STRING",
+    "city": "STRING",
+    "province": "STRING",
+    "app_version": "STRING",
+    "os": "STRING",
+    "device_model": "STRING",
+    "register_date": "STRING",
+    "start_date": "STRING",
+    "end_date": "STRING",
+    "is_current": "STRING",
+    "change_type": "STRING"
+   },
+   "source": "00_all_ddl.sql",
+   "name_cn": "用户维度",
+   "grain": "一个用户的一个历史版本一行（SCD2 拉链表，不是一人一行）",
+   "pk": "user_id",
+   "rows": 1150000,
+   "catalog": "hive_catalog",
+   "database": "music_dw",
+   "caveats": [
+    "**JOIN 必须收敛**：`is_current='Y'` 或 `dt BETWEEN start_date AND end_date`，否则行数膨胀。实测 11-08 `dwd_session JOIN dim_user` 不加收敛得 3,171 行、加了得 2,660 行，虚高 19.2% 且零报错（护栏 R18）",
+    "province 只有 **28** 个取值，而事件表 province 有 **31** 个；按维表关联与按事件字段分组，省份数不同，不要混用",
+    "有 115 万用户，但全窗口活跃用户只有 7.1 万（日均 2,031），维表远大于事实表是正常现象"
+   ],
+   "pk_unique": false,
+   "versions": "scd2"
+  },
+  "dim_date": {
+   "layer": "dim",
+   "partitioned_by": [
+    "dt"
+   ],
+   "columns": [
+    "dt",
+    "day_of_week_num",
+    "day_of_week",
+    "week_of_year",
+    "month",
+    "quarter",
+    "year",
+    "is_weekend"
+   ],
+   "types": {
+    "dt": "STRING",
+    "day_of_week_num": "INT",
+    "day_of_week": "STRING",
+    "week_of_year": "INT",
+    "month": "INT",
+    "quarter": "INT",
+    "year": "INT",
+    "is_weekend": "STRING"
+   },
+   "source": "00_all_ddl.sql",
+   "name_cn": "日期维度",
+   "grain": "一天一行",
+   "pk": "dt",
+   "rows": 35,
+   "catalog": "hive_catalog",
+   "database": "music_dw",
+   "caveats": [
+    "行数只有 35，只覆盖重造窗口；跨窗口分析要按需生成，不能假设日历完整"
+   ],
+   "pk_unique": true,
+   "versions": "none"
+  },
+  "dws_song_play_daily": {
+   "layer": "dws",
+   "partitioned_by": [
+    "dt"
+   ],
+   "columns": [
+    "song_id",
+    "play_start_cnt",
+    "play_end_cnt",
+    "complete_cnt",
+    "complete_rate",
+    "skip_play_cnt",
+    "avg_progress",
+    "avg_play_duration",
+    "dt"
+   ],
+   "types": {
+    "song_id": "STRING",
+    "play_start_cnt": "BIGINT",
+    "play_end_cnt": "BIGINT",
+    "complete_cnt": "BIGINT",
+    "complete_rate": "DOUBLE",
+    "skip_play_cnt": "BIGINT",
+    "avg_progress": "DOUBLE",
+    "avg_play_duration": "DOUBLE",
+    "dt": "STRING"
+   },
+   "source": "00_all_ddl.sql",
+   "name_cn": "歌曲日粒度播放汇总",
+   "grain": "歌 × 天",
+   "pk": [
+    "dt",
+    "song_id"
+   ],
+   "rows": 51540,
+   "catalog": "hive_catalog",
+   "database": "music_dw",
+   "caveats": [
+    "complete_rate 已是日粒度比率，跨天聚合必须 SUM(complete_cnt)/SUM(play_start_cnt)，不能 AVG"
+   ],
+   "pk_unique": true,
+   "versions": "none"
+  },
+  "dws_user_daily": {
+   "layer": "dws",
+   "partitioned_by": [
+    "dt"
+   ],
+   "columns": [
+    "dau",
+    "session_cnt",
+    "play_start_cnt",
+    "avg_play_per_user",
+    "avg_sess_per_user",
+    "login_user_cnt",
+    "vip_user_cnt",
+    "dt"
+   ],
+   "types": {
+    "dau": "BIGINT",
+    "session_cnt": "BIGINT",
+    "play_start_cnt": "BIGINT",
+    "avg_play_per_user": "DOUBLE",
+    "avg_sess_per_user": "DOUBLE",
+    "login_user_cnt": "BIGINT",
+    "vip_user_cnt": "BIGINT",
+    "dt": "STRING"
+   },
+   "source": "00_all_ddl.sql",
+   "name_cn": "用户日粒度活跃汇总",
+   "grain": "天（全站一行）",
+   "pk": [
+    "dt"
+   ],
+   "rows": 35,
+   "catalog": "hive_catalog",
+   "database": "music_dw",
+   "caveats": [
+    "2026-11-09 起 dau/session_cnt 与 dwd_session(app_launch) 同源（全量活跃 + 全量会话）；play_start_cnt 仍来自 dwd_play_start，所以 avg_play_per_user = 起播次数 / 全量活跃用户数",
+    "login_user_cnt / vip_user_cnt 只对登录用户去重（游客无从判断），两者天然 ≤ dau",
+    "**dau 是「当天去重人数」，跨天不可相加当 UV**：35 天 SUM(dau) = 113,131 是**人日**，窗口去重 UV 只有 23,212，差 4.87 倍。问「这段时间多少用户」必须回明细重算去重，不能 SUM",
+    "旧版（11-09 之前）dau 取自 dwd_play_start，只覆盖「播过歌的人」，比真实活跃低 22%（11-08：2,525 vs 3,237）；看到 2,4xx~2,5xx 的日活跃数说明读到的是旧分区"
+   ],
+   "pk_unique": true,
+   "versions": "none"
+  },
+  "dws_genre_daily": {
+   "layer": "dws",
+   "partitioned_by": [
+    "dt"
+   ],
+   "columns": [
+    "genre",
+    "play_start_cnt",
+    "play_end_cnt",
+    "complete_cnt",
+    "complete_rate",
+    "avg_progress",
+    "user_cnt",
+    "dt"
+   ],
+   "types": {
+    "genre": "STRING",
+    "play_start_cnt": "BIGINT",
+    "play_end_cnt": "BIGINT",
+    "complete_cnt": "BIGINT",
+    "complete_rate": "DOUBLE",
+    "avg_progress": "DOUBLE",
+    "user_cnt": "BIGINT",
+    "dt": "STRING"
+   },
+   "source": "00_all_ddl.sql",
+   "name_cn": "曲风日粒度汇总",
+   "grain": "曲风 × 天",
+   "pk": [
+    "dt",
+    "genre"
+   ],
+   "rows": 140,
+   "catalog": "hive_catalog",
+   "database": "music_dw",
+   "caveats": [
+    "140 = 4 曲风 × 35 天，曲风维度只有 4 类，不要期待长尾",
+    "本表**没有 song_id**，只有曲风级聚合。要数「多少首歌」必须换 dws_song_play_daily（歌×天）再 JOIN dim_song ON song_id"
+   ],
+   "pk_unique": true,
+   "versions": "none",
+   "not_for": [
+    "多少首歌",
+    "首歌被播放",
+    "曲目数",
+    "被播放过的歌"
+   ]
+  },
+  "dws_province_daily": {
+   "layer": "dws",
+   "partitioned_by": [
+    "dt"
+   ],
+   "columns": [
+    "province",
+    "city",
+    "dau",
+    "play_start_cnt",
+    "session_cnt",
+    "dt"
+   ],
+   "types": {
+    "province": "STRING",
+    "city": "STRING",
+    "dau": "BIGINT",
+    "play_start_cnt": "BIGINT",
+    "session_cnt": "BIGINT",
+    "dt": "STRING"
+   },
+   "source": "00_all_ddl.sql",
+   "name_cn": "省份城市日粒度汇总",
+   "grain": "省 × 市 × 天",
+   "pk": [
+    "dt",
+    "province",
+    "city"
+   ],
+   "rows": 2728,
+   "catalog": "hive_catalog",
+   "database": "music_dw",
+   "caveats": [
+    "2728 ≈ 78 组合/天；city 无空值，每条都是「某省某市」",
+    "**分省 dau 之和 = 全站 dau**（2026-11-09 实测 113,131 = 113,131）。这是硬判据：不相等说明有跨省用户或游客分组重复计数"
+   ],
+   "pk_unique": true,
+   "versions": "none"
+  },
+  "ads_daily_overview": {
+   "layer": "ads",
+   "partitioned_by": [
+    "dt"
+   ],
+   "columns": [
+    "dau",
+    "session_cnt",
+    "play_start_cnt",
+    "play_end_cnt",
+    "complete_cnt",
+    "complete_rate",
+    "incomplete_rate",
+    "avg_progress",
+    "avg_play_per_user",
+    "login_user_cnt",
+    "vip_user_cnt",
+    "dt"
+   ],
+   "types": {
+    "dau": "BIGINT",
+    "session_cnt": "BIGINT",
+    "play_start_cnt": "BIGINT",
+    "play_end_cnt": "BIGINT",
+    "complete_cnt": "BIGINT",
+    "complete_rate": "DOUBLE",
+    "incomplete_rate": "DOUBLE",
+    "avg_progress": "DOUBLE",
+    "avg_play_per_user": "DOUBLE",
+    "login_user_cnt": "BIGINT",
+    "vip_user_cnt": "BIGINT",
+    "dt": "STRING"
+   },
+   "source": "00_all_ddl.sql",
+   "name_cn": "日报概览",
+   "grain": "天",
+   "pk": [
+    "dt"
+   ],
+   "rows": 35,
+   "catalog": "hive_catalog",
+   "database": "music_dw",
+   "caveats": [
+    "dau / session_cnt 来自 dws_user_daily，2026-11-09 起口径为「启动过 App 的全量活跃」：dau = COUNT(DISTINCT COALESCE(NULLIF(user_id,''), device_id))，session_cnt = app_launch 的全量会话",
+    "旧版此处是「有起播的用户/会话」，实测低 22%（2,525 vs 3,237 / 2,542 vs 3,270），已废弃",
+    "跨天算完播率必须重算，ROUND 后的比率再 AVG 会有假精度"
+   ],
+   "pk_unique": true,
+   "versions": "none"
+  },
+  "ads_song_ranking": {
+   "layer": "ads",
+   "partitioned_by": [
+    "dt"
+   ],
+   "columns": [
+    "rank_no",
+    "song_id",
+    "song_name",
+    "singer",
+    "genre",
+    "play_start_cnt",
+    "complete_cnt",
+    "complete_rate",
+    "avg_progress",
+    "dt"
+   ],
+   "types": {
+    "rank_no": "INT",
+    "song_id": "STRING",
+    "song_name": "STRING",
+    "singer": "STRING",
+    "genre": "STRING",
+    "play_start_cnt": "BIGINT",
+    "complete_cnt": "BIGINT",
+    "complete_rate": "DOUBLE",
+    "avg_progress": "DOUBLE",
+    "dt": "STRING"
+   },
+   "source": "00_all_ddl.sql",
+   "name_cn": "歌曲榜 Top20（按完播率排序，非播放量榜）",
+   "grain": "天 × 名次（每天 20 行）",
+   "pk": [
+    "dt",
+    "rank_no"
+   ],
+   "rows": 700,
+   "catalog": "hive_catalog",
+   "database": "music_dw",
+   "caveats": [
+    "rank_no 按**完播率**降序，与 play_start_cnt 无关：2026-11-08 榜首仅 34 次起播，播放量 Top1（264 次）不在榜内",
+    "问「播放量最高 / 播放量排行榜」不要用本表，改在 dws_song_play_daily 上 ORDER BY play_start_cnt + JOIN dim_song 取歌名",
+    "700 = 20 名 × 35 天；只能取榜单，SUM(play_start_cnt) 会得到 574 而已，远小于全站 12,710",
+    "rank_no 每天从 1 重排，跨天比名次要用 rank_no，不能用 song_id 排序"
+   ],
+   "pk_unique": true,
+   "versions": "none",
+   "not_for": [
+    "播放量",
+    "播放次数",
+    "起播",
+    "听歌量"
+   ]
+  },
+  "ads_genre_dist": {
+   "layer": "ads",
+   "partitioned_by": [
+    "dt"
+   ],
+   "columns": [
+    "genre",
+    "play_start_cnt",
+    "start_share",
+    "complete_rate",
+    "user_cnt",
+    "dt"
+   ],
+   "types": {
+    "genre": "STRING",
+    "play_start_cnt": "BIGINT",
+    "start_share": "DOUBLE",
+    "complete_rate": "DOUBLE",
+    "user_cnt": "BIGINT",
+    "dt": "STRING"
+   },
+   "source": "00_all_ddl.sql",
+   "name_cn": "曲风分布",
+   "grain": "曲风 × 天",
+   "pk": [
+    "dt",
+    "genre"
+   ],
+   "rows": 140,
+   "catalog": "hive_catalog",
+   "database": "music_dw",
+   "caveats": [
+    "start_share 是当日占比，跨天不能直接相加"
+   ],
+   "pk_unique": true,
+   "versions": "none"
+  },
+  "ads_province_dist": {
+   "layer": "ads",
+   "partitioned_by": [
+    "dt"
+   ],
+   "columns": [
+    "province",
+    "dau",
+    "play_start_cnt",
+    "session_cnt",
+    "dau_share",
+    "dt"
+   ],
+   "types": {
+    "province": "STRING",
+    "dau": "BIGINT",
+    "play_start_cnt": "BIGINT",
+    "session_cnt": "BIGINT",
+    "dau_share": "DOUBLE",
+    "dt": "STRING"
+   },
+   "source": "00_all_ddl.sql",
+   "name_cn": "省份分布",
+   "grain": "省 × 天",
+   "pk": [
+    "dt",
+    "province"
+   ],
+   "rows": 1085,
+   "catalog": "hive_catalog",
+   "database": "music_dw",
+   "caveats": [
+    "1085 = 31 省 × 35 天（比 dws_province_daily 的 78 组合/天少，因为这里只到省）",
+    "dau_share 每日合计 = 1.0；且 SUM(dau) 与全站 dau **精确相等**（2026-11-09 实测 113,131 = 113,131）—— 这是地域口径正确性的硬判据，不相等就一定有 bug",
+    "sum(dau) 曾经比全站多 71（游客在含游客的 (省,市) 组各计 1 次），已由设备实体去重修复"
+   ],
+   "pk_unique": true,
+   "versions": "none"
+  },
+  "ads_user_retention": {
+   "layer": "ads",
+   "partitioned_by": [],
+   "columns": [
+    "cohort_date",
+    "day_n",
+    "cohort_size",
+    "retained_users",
+    "retention_rate"
+   ],
+   "types": {
+    "cohort_date": "STRING",
+    "day_n": "INT",
+    "cohort_size": "BIGINT",
+    "retained_users": "BIGINT",
+    "retention_rate": "DOUBLE"
+   },
+   "source": "00_all_ddl.sql",
+   "name_cn": "留存同期群",
+   "grain": "同期群(cohort_date) × 第 N 日(day_n)",
+   "pk": [
+    "cohort_date",
+    "day_n"
+   ],
+   "rows": 217,
+   "catalog": "hive_catalog",
+   "database": "music_dw",
+   "caveats": [
+    "**没有 dt 分区**，用 cohort_date 过滤；写成 WHERE dt=... 会报 Invalid table alias",
+    "day_n 是「第 N 日」不是日期；day_n=1 才是次日留存",
+    "217 行：D1 有 34 个 cohort，逐天递减到 D7 的 28 个（窗口尾部没有 7 天可观测）",
+    "retention_rate 已是比率，跨 cohort 求平均要按 cohort_size 加权，不能直接 AVG"
+   ],
+   "pk_unique": true,
+   "versions": "none"
+  },
+  "dwd_session": {
+   "layer": "dwd",
+   "partitioned_by": [
+    "dt"
+   ],
+   "columns": [
+    "event_id",
+    "event_ts",
+    "server_ts",
+    "user_id",
+    "device_id",
+    "is_login",
+    "is_vip",
+    "app_version",
+    "os",
+    "os_version",
+    "device_model",
+    "network",
+    "carrier",
+    "ip",
+    "province",
+    "city",
+    "session_id",
+    "session_seq",
+    "is_foreground",
+    "channel",
+    "page_id",
+    "event_name",
+    "launch_type",
+    "source",
+    "stay_duration",
+    "exit_type",
+    "properties_raw",
+    "etl_time",
+    "dt"
+   ],
+   "types": {
+    "event_id": "STRING",
+    "event_ts": "TIMESTAMP",
+    "server_ts": "TIMESTAMP",
+    "user_id": "STRING",
+    "device_id": "STRING",
+    "is_login": "STRING",
+    "is_vip": "STRING",
+    "app_version": "STRING",
+    "os": "STRING",
+    "os_version": "STRING",
+    "device_model": "STRING",
+    "network": "STRING",
+    "carrier": "STRING",
+    "ip": "STRING",
+    "province": "STRING",
+    "city": "STRING",
+    "session_id": "STRING",
+    "session_seq": "STRING",
+    "is_foreground": "STRING",
+    "channel": "STRING",
+    "page_id": "STRING",
+    "event_name": "STRING",
+    "launch_type": "STRING",
+    "source": "STRING",
+    "stay_duration": "BIGINT",
+    "exit_type": "STRING",
+    "properties_raw": "STRING",
+    "etl_time": "TIMESTAMP",
+    "dt": "STRING"
+   },
+   "source": "11_dwd_domain_tables.sql",
+   "name_cn": "会话与启动退出事件",
+   "grain": "一条会话内事件（app_launch / app_exit 等）",
+   "pk": "event_id",
+   "rows": 203639,
+   "catalog": "hive_catalog",
+   "database": "music_dw",
+   "caveats": [
+    "行数 203,639 ≠ 会话数；COUNT(DISTINCT session_id) 才是 114,450",
+    "2026-11-09 起 dws_user_daily.session_cnt 与本表同源（app_launch 全量），可直接交叉校验"
+   ],
+   "pk_unique": true,
+   "versions": "none"
+  },
+  "dwd_impression": {
+   "layer": "dwd",
+   "partitioned_by": [
+    "dt"
+   ],
+   "columns": [
+    "event_id",
+    "event_ts",
+    "server_ts",
+    "user_id",
+    "device_id",
+    "is_login",
+    "is_vip",
+    "app_version",
+    "os",
+    "os_version",
+    "device_model",
+    "network",
+    "carrier",
+    "ip",
+    "province",
+    "city",
+    "session_id",
+    "session_seq",
+    "is_foreground",
+    "channel",
+    "page_id",
+    "event_name",
+    "song_id",
+    "position",
+    "scene",
+    "is_click",
+    "properties_raw",
+    "etl_time",
+    "dt"
+   ],
+   "types": {
+    "event_id": "STRING",
+    "event_ts": "TIMESTAMP",
+    "server_ts": "TIMESTAMP",
+    "user_id": "STRING",
+    "device_id": "STRING",
+    "is_login": "STRING",
+    "is_vip": "STRING",
+    "app_version": "STRING",
+    "os": "STRING",
+    "os_version": "STRING",
+    "device_model": "STRING",
+    "network": "STRING",
+    "carrier": "STRING",
+    "ip": "STRING",
+    "province": "STRING",
+    "city": "STRING",
+    "session_id": "STRING",
+    "session_seq": "STRING",
+    "is_foreground": "STRING",
+    "channel": "STRING",
+    "page_id": "STRING",
+    "event_name": "STRING",
+    "song_id": "STRING",
+    "position": "INT",
+    "scene": "STRING",
+    "is_click": "INT",
+    "properties_raw": "STRING",
+    "etl_time": "TIMESTAMP",
+    "dt": "STRING"
+   },
+   "source": "11_dwd_domain_tables.sql",
+   "name_cn": "曝光明细",
+   "grain": "一次曝光",
+   "pk": "event_id",
+   "rows": 2229725,
+   "catalog": "hive_catalog",
+   "database": "music_dw",
+   "caveats": [
+    "ctr 的分母来源；曝光量是明细层最大的表（223 万行，占全量 45%）"
+   ],
+   "pk_unique": true,
+   "versions": "none"
+  },
+  "dwd_click": {
+   "layer": "dwd",
+   "partitioned_by": [
+    "dt"
+   ],
+   "columns": [
+    "event_id",
+    "event_ts",
+    "server_ts",
+    "user_id",
+    "device_id",
+    "is_login",
+    "is_vip",
+    "app_version",
+    "os",
+    "os_version",
+    "device_model",
+    "network",
+    "carrier",
+    "ip",
+    "province",
+    "city",
+    "session_id",
+    "session_seq",
+    "is_foreground",
+    "channel",
+    "page_id",
+    "event_name",
+    "song_id",
+    "target_type",
+    "target_id",
+    "position",
+    "page",
+    "is_click",
+    "properties_raw",
+    "etl_time",
+    "dt"
+   ],
+   "types": {
+    "event_id": "STRING",
+    "event_ts": "TIMESTAMP",
+    "server_ts": "TIMESTAMP",
+    "user_id": "STRING",
+    "device_id": "STRING",
+    "is_login": "STRING",
+    "is_vip": "STRING",
+    "app_version": "STRING",
+    "os": "STRING",
+    "os_version": "STRING",
+    "device_model": "STRING",
+    "network": "STRING",
+    "carrier": "STRING",
+    "ip": "STRING",
+    "province": "STRING",
+    "city": "STRING",
+    "session_id": "STRING",
+    "session_seq": "STRING",
+    "is_foreground": "STRING",
+    "channel": "STRING",
+    "page_id": "STRING",
+    "event_name": "STRING",
+    "song_id": "STRING",
+    "target_type": "STRING",
+    "target_id": "STRING",
+    "position": "INT",
+    "page": "STRING",
+    "is_click": "INT",
+    "properties_raw": "STRING",
+    "etl_time": "TIMESTAMP",
+    "dt": "STRING"
+   },
+   "source": "11_dwd_domain_tables.sql",
+   "name_cn": "点击明细",
+   "grain": "一次点击",
+   "pk": "event_id",
+   "rows": 445945,
+   "catalog": "hive_catalog",
+   "database": "music_dw",
+   "caveats": [
+    "点击量与起播量完全相等（445,945），因为生成器让每次点击必然跟一次起播 → click_to_play_rate 恒为 1.0，无区分度"
+   ],
+   "pk_unique": true,
+   "versions": "none"
+  },
+  "dwd_play_control": {
+   "layer": "dwd",
+   "partitioned_by": [
+    "dt"
+   ],
+   "columns": [
+    "event_id",
+    "event_ts",
+    "server_ts",
+    "user_id",
+    "device_id",
+    "is_login",
+    "is_vip",
+    "app_version",
+    "os",
+    "os_version",
+    "device_model",
+    "network",
+    "carrier",
+    "ip",
+    "province",
+    "city",
+    "session_id",
+    "session_seq",
+    "is_foreground",
+    "channel",
+    "page_id",
+    "event_name",
+    "song_id",
+    "position",
+    "from_pos",
+    "to_pos",
+    "direction",
+    "pause_duration",
+    "error_type",
+    "properties_raw",
+    "etl_time",
+    "dt"
+   ],
+   "types": {
+    "event_id": "STRING",
+    "event_ts": "TIMESTAMP",
+    "server_ts": "TIMESTAMP",
+    "user_id": "STRING",
+    "device_id": "STRING",
+    "is_login": "STRING",
+    "is_vip": "STRING",
+    "app_version": "STRING",
+    "os": "STRING",
+    "os_version": "STRING",
+    "device_model": "STRING",
+    "network": "STRING",
+    "carrier": "STRING",
+    "ip": "STRING",
+    "province": "STRING",
+    "city": "STRING",
+    "session_id": "STRING",
+    "session_seq": "STRING",
+    "is_foreground": "STRING",
+    "channel": "STRING",
+    "page_id": "STRING",
+    "event_name": "STRING",
+    "song_id": "STRING",
+    "position": "INT",
+    "from_pos": "INT",
+    "to_pos": "INT",
+    "direction": "STRING",
+    "pause_duration": "INT",
+    "error_type": "STRING",
+    "properties_raw": "STRING",
+    "etl_time": "TIMESTAMP",
+    "dt": "STRING"
+   },
+   "source": "11_dwd_domain_tables.sql",
+   "name_cn": "播放控制明细",
+   "grain": "一次控制事件（seek / play_error / pause / resume）",
+   "pk": "event_id",
+   "rows": 223940,
+   "catalog": "hive_catalog",
+   "database": "music_dw",
+   "caveats": [
+    "一张表混了多种 event_name，取 seek_cnt / play_error_cnt 必须带 event_name 过滤"
+   ],
+   "pk_unique": true,
+   "versions": "none"
+  },
+  "dwd_interaction": {
+   "layer": "dwd",
+   "partitioned_by": [
+    "dt"
+   ],
+   "columns": [
+    "event_id",
+    "event_ts",
+    "server_ts",
+    "user_id",
+    "device_id",
+    "is_login",
+    "is_vip",
+    "app_version",
+    "os",
+    "os_version",
+    "device_model",
+    "network",
+    "carrier",
+    "ip",
+    "province",
+    "city",
+    "session_id",
+    "session_seq",
+    "is_foreground",
+    "channel",
+    "page_id",
+    "event_name",
+    "song_id",
+    "action",
+    "share_channel",
+    "comment_len",
+    "quality",
+    "artist_id",
+    "playlist_id",
+    "properties_raw",
+    "etl_time",
+    "dt"
+   ],
+   "types": {
+    "event_id": "STRING",
+    "event_ts": "TIMESTAMP",
+    "server_ts": "TIMESTAMP",
+    "user_id": "STRING",
+    "device_id": "STRING",
+    "is_login": "STRING",
+    "is_vip": "STRING",
+    "app_version": "STRING",
+    "os": "STRING",
+    "os_version": "STRING",
+    "device_model": "STRING",
+    "network": "STRING",
+    "carrier": "STRING",
+    "ip": "STRING",
+    "province": "STRING",
+    "city": "STRING",
+    "session_id": "STRING",
+    "session_seq": "STRING",
+    "is_foreground": "STRING",
+    "channel": "STRING",
+    "page_id": "STRING",
+    "event_name": "STRING",
+    "song_id": "STRING",
+    "action": "STRING",
+    "share_channel": "STRING",
+    "comment_len": "INT",
+    "quality": "STRING",
+    "artist_id": "STRING",
+    "playlist_id": "STRING",
+    "properties_raw": "STRING",
+    "etl_time": "TIMESTAMP",
+    "dt": "STRING"
+   },
+   "source": "11_dwd_domain_tables.sql",
+   "name_cn": "互动明细",
+   "grain": "一次互动事件",
+   "pk": "event_id",
+   "rows": 343572,
+   "catalog": "hive_catalog",
+   "database": "music_dw",
+   "caveats": [
+    "collect / like 区分 action='add' / 'cancel'，算收藏数必须带 action='add'，否则加减抵消"
+   ],
+   "pk_unique": true,
+   "versions": "none"
+  },
+  "dwd_search": {
+   "layer": "dwd",
+   "partitioned_by": [
+    "dt"
+   ],
+   "columns": [
+    "event_id",
+    "event_ts",
+    "server_ts",
+    "user_id",
+    "device_id",
+    "is_login",
+    "is_vip",
+    "app_version",
+    "os",
+    "os_version",
+    "device_model",
+    "network",
+    "carrier",
+    "ip",
+    "province",
+    "city",
+    "session_id",
+    "session_seq",
+    "is_foreground",
+    "channel",
+    "page_id",
+    "event_name",
+    "keyword",
+    "search_type",
+    "result_cnt",
+    "result_type",
+    "result_id",
+    "position",
+    "properties_raw",
+    "etl_time",
+    "dt"
+   ],
+   "types": {
+    "event_id": "STRING",
+    "event_ts": "TIMESTAMP",
+    "server_ts": "TIMESTAMP",
+    "user_id": "STRING",
+    "device_id": "STRING",
+    "is_login": "STRING",
+    "is_vip": "STRING",
+    "app_version": "STRING",
+    "os": "STRING",
+    "os_version": "STRING",
+    "device_model": "STRING",
+    "network": "STRING",
+    "carrier": "STRING",
+    "ip": "STRING",
+    "province": "STRING",
+    "city": "STRING",
+    "session_id": "STRING",
+    "session_seq": "STRING",
+    "is_foreground": "STRING",
+    "channel": "STRING",
+    "page_id": "STRING",
+    "event_name": "STRING",
+    "keyword": "STRING",
+    "search_type": "STRING",
+    "result_cnt": "INT",
+    "result_type": "STRING",
+    "result_id": "STRING",
+    "position": "INT",
+    "properties_raw": "STRING",
+    "etl_time": "TIMESTAMP",
+    "dt": "STRING"
+   },
+   "source": "11_dwd_domain_tables.sql",
+   "name_cn": "搜索明细",
+   "grain": "一次搜索或搜索点击",
+   "pk": "event_id",
+   "rows": 75944,
+   "catalog": "hive_catalog",
+   "database": "music_dw",
+   "caveats": [
+    "search 与 search_click 是两种 event_name，同表混存"
+   ],
+   "pk_unique": true,
+   "versions": "none"
+  },
+  "dwd_ad": {
+   "layer": "dwd",
+   "partitioned_by": [
+    "dt"
+   ],
+   "columns": [
+    "event_id",
+    "event_ts",
+    "server_ts",
+    "user_id",
+    "device_id",
+    "is_login",
+    "is_vip",
+    "app_version",
+    "os",
+    "os_version",
+    "device_model",
+    "network",
+    "carrier",
+    "ip",
+    "province",
+    "city",
+    "session_id",
+    "session_seq",
+    "is_foreground",
+    "channel",
+    "page_id",
+    "event_name",
+    "ad_id",
+    "ad_type",
+    "position",
+    "bid_price",
+    "properties_raw",
+    "etl_time",
+    "dt"
+   ],
+   "types": {
+    "event_id": "STRING",
+    "event_ts": "TIMESTAMP",
+    "server_ts": "TIMESTAMP",
+    "user_id": "STRING",
+    "device_id": "STRING",
+    "is_login": "STRING",
+    "is_vip": "STRING",
+    "app_version": "STRING",
+    "os": "STRING",
+    "os_version": "STRING",
+    "device_model": "STRING",
+    "network": "STRING",
+    "carrier": "STRING",
+    "ip": "STRING",
+    "province": "STRING",
+    "city": "STRING",
+    "session_id": "STRING",
+    "session_seq": "STRING",
+    "is_foreground": "STRING",
+    "channel": "STRING",
+    "page_id": "STRING",
+    "event_name": "STRING",
+    "ad_id": "STRING",
+    "ad_type": "STRING",
+    "position": "INT",
+    "bid_price": "DECIMAL(18,2)",
+    "properties_raw": "STRING",
+    "etl_time": "TIMESTAMP",
+    "dt": "STRING"
+   },
+   "source": "11_dwd_domain_tables.sql",
+   "name_cn": "广告明细",
+   "grain": "一次广告曝光或点击",
+   "pk": "event_id",
+   "rows": 275596,
+   "catalog": "hive_catalog",
+   "database": "music_dw",
+   "caveats": [
+    "广告收入是按「点击 × 出价」**估算**的，不是真实竞价结果，不能做真实归因"
+   ],
+   "pk_unique": true,
+   "versions": "none"
+  },
+  "dwd_pay": {
+   "layer": "dwd",
+   "partitioned_by": [
+    "dt"
+   ],
+   "columns": [
+    "event_id",
+    "event_ts",
+    "server_ts",
+    "user_id",
+    "device_id",
+    "is_login",
+    "is_vip",
+    "app_version",
+    "os",
+    "os_version",
+    "device_model",
+    "network",
+    "carrier",
+    "ip",
+    "province",
+    "city",
+    "session_id",
+    "session_seq",
+    "is_foreground",
+    "channel",
+    "page_id",
+    "event_name",
+    "sku_id",
+    "amount",
+    "pay_channel",
+    "order_id",
+    "reason",
+    "properties_raw",
+    "etl_time",
+    "dt"
+   ],
+   "types": {
+    "event_id": "STRING",
+    "event_ts": "TIMESTAMP",
+    "server_ts": "TIMESTAMP",
+    "user_id": "STRING",
+    "device_id": "STRING",
+    "is_login": "STRING",
+    "is_vip": "STRING",
+    "app_version": "STRING",
+    "os": "STRING",
+    "os_version": "STRING",
+    "device_model": "STRING",
+    "network": "STRING",
+    "carrier": "STRING",
+    "ip": "STRING",
+    "province": "STRING",
+    "city": "STRING",
+    "session_id": "STRING",
+    "session_seq": "STRING",
+    "is_foreground": "STRING",
+    "channel": "STRING",
+    "page_id": "STRING",
+    "event_name": "STRING",
+    "sku_id": "STRING",
+    "amount": "DECIMAL(18,2)",
+    "pay_channel": "STRING",
+    "order_id": "STRING",
+    "reason": "STRING",
+    "properties_raw": "STRING",
+    "etl_time": "TIMESTAMP",
+    "dt": "STRING"
+   },
+   "source": "11_dwd_domain_tables.sql",
+   "name_cn": "支付与退款明细",
+   "grain": "一笔订单事件（支付或退款）",
+   "pk": "event_id",
+   "rows": 36578,
+   "catalog": "hive_catalog",
+   "database": "music_dw",
+   "caveats": [
+    "order_pay 与 order_refund 同表混存：算收入必须显式区分事件——净收入 = vip_subscribe + order_pay 减退款（订单/退款都别忘了，只取 order_pay 会漏掉占 82% 的 VIP 订阅，2026-11-09 实测低 5.24 倍）",
+    "amount 是 DECIMAL(18,2)，不要转 DOUBLE 求和"
+   ],
+   "pk_unique": true,
+   "versions": "none"
+  },
+  "dwd_page_view": {
+   "layer": "dwd",
+   "partitioned_by": [
+    "dt"
+   ],
+   "columns": [
+    "event_id",
+    "event_ts",
+    "server_ts",
+    "user_id",
+    "device_id",
+    "is_login",
+    "is_vip",
+    "app_version",
+    "os",
+    "os_version",
+    "device_model",
+    "network",
+    "carrier",
+    "ip",
+    "province",
+    "city",
+    "session_id",
+    "session_seq",
+    "is_foreground",
+    "channel",
+    "page_id",
+    "event_name",
+    "page",
+    "from_page",
+    "stay_duration",
+    "properties_raw",
+    "etl_time",
+    "dt"
+   ],
+   "types": {
+    "event_id": "STRING",
+    "event_ts": "TIMESTAMP",
+    "server_ts": "TIMESTAMP",
+    "user_id": "STRING",
+    "device_id": "STRING",
+    "is_login": "STRING",
+    "is_vip": "STRING",
+    "app_version": "STRING",
+    "os": "STRING",
+    "os_version": "STRING",
+    "device_model": "STRING",
+    "network": "STRING",
+    "carrier": "STRING",
+    "ip": "STRING",
+    "province": "STRING",
+    "city": "STRING",
+    "session_id": "STRING",
+    "session_seq": "STRING",
+    "is_foreground": "STRING",
+    "channel": "STRING",
+    "page_id": "STRING",
+    "event_name": "STRING",
+    "page": "STRING",
+    "from_page": "STRING",
+    "stay_duration": "INT",
+    "properties_raw": "STRING",
+    "etl_time": "TIMESTAMP",
+    "dt": "STRING"
+   },
+   "source": "11_dwd_domain_tables.sql",
+   "name_cn": "页面浏览明细",
+   "grain": "一次页面浏览",
+   "pk": "event_id",
+   "rows": 267567,
+   "catalog": "hive_catalog",
+   "database": "music_dw",
+   "caveats": [],
+   "pk_unique": true,
+   "versions": "none"
+  },
+  "dws_funnel_daily": {
+   "layer": "dws",
+   "partitioned_by": [
+    "dt"
+   ],
+   "columns": [
+    "impression_cnt",
+    "click_cnt",
+    "play_start_cnt",
+    "complete_cnt",
+    "interact_cnt",
+    "pay_cnt",
+    "ctr",
+    "click_to_play_rate",
+    "complete_rate",
+    "interact_rate",
+    "pay_conv_rate",
+    "dt"
+   ],
+   "types": {
+    "impression_cnt": "BIGINT",
+    "click_cnt": "BIGINT",
+    "play_start_cnt": "BIGINT",
+    "complete_cnt": "BIGINT",
+    "interact_cnt": "BIGINT",
+    "pay_cnt": "BIGINT",
+    "ctr": "DOUBLE",
+    "click_to_play_rate": "DOUBLE",
+    "complete_rate": "DOUBLE",
+    "interact_rate": "DOUBLE",
+    "pay_conv_rate": "DOUBLE",
+    "dt": "STRING"
+   },
+   "source": "12_dws_ads_ext.sql",
+   "name_cn": "六层转化漏斗（日）",
+   "grain": "天",
+   "pk": [
+    "dt"
+   ],
+   "rows": 35,
+   "catalog": "hive_catalog",
+   "database": "music_dw",
+   "caveats": [
+    "pay_conv_rate 的分母是**曝光**（付费/曝光），不是完播；docs/20 §5.1 写的是五层漏斗，实现是六层，以本表为准",
+    "ctr 恒为 0.2、click_to_play_rate 恒为 1.0，是生成器设定导致的退化，不是业务结论"
+   ],
+   "pk_unique": true,
+   "versions": "none"
+  },
+  "dws_search_daily": {
+   "layer": "dws",
+   "partitioned_by": [
+    "dt"
+   ],
+   "columns": [
+    "keyword",
+    "search_pv",
+    "search_uv",
+    "search_click_pv",
+    "search_click_rate",
+    "zero_result_pv",
+    "zero_result_rate",
+    "avg_result_cnt",
+    "dt"
+   ],
+   "types": {
+    "keyword": "STRING",
+    "search_pv": "BIGINT",
+    "search_uv": "BIGINT",
+    "search_click_pv": "BIGINT",
+    "search_click_rate": "DOUBLE",
+    "zero_result_pv": "BIGINT",
+    "zero_result_rate": "DOUBLE",
+    "avg_result_cnt": "DOUBLE",
+    "dt": "STRING"
+   },
+   "source": "12_dws_ads_ext.sql",
+   "name_cn": "搜索词日粒度汇总",
+   "grain": "搜索词 × 天",
+   "pk": [
+    "dt",
+    "keyword"
+   ],
+   "rows": 350,
+   "catalog": "hive_catalog",
+   "database": "music_dw",
+   "caveats": [
+    "350 = 10 搜索词 × 35 天，词表很小"
+   ],
+   "pk_unique": true,
+   "versions": "none"
+  },
+  "dws_revenue_daily": {
+   "layer": "dws",
+   "partitioned_by": [
+    "dt"
+   ],
+   "columns": [
+    "vip_subscribe_cnt",
+    "order_pay_cnt",
+    "refund_cnt",
+    "pay_user_cnt",
+    "gross_revenue",
+    "refund_amount",
+    "net_revenue",
+    "arpu",
+    "refund_rate",
+    "ad_impression_cnt",
+    "ad_click_cnt",
+    "ad_ctr",
+    "ad_revenue",
+    "dt"
+   ],
+   "types": {
+    "vip_subscribe_cnt": "BIGINT",
+    "order_pay_cnt": "BIGINT",
+    "refund_cnt": "BIGINT",
+    "pay_user_cnt": "BIGINT",
+    "gross_revenue": "DECIMAL(18,2)",
+    "refund_amount": "DECIMAL(18,2)",
+    "net_revenue": "DECIMAL(18,2)",
+    "arpu": "DECIMAL(18,2)",
+    "refund_rate": "DOUBLE",
+    "ad_impression_cnt": "BIGINT",
+    "ad_click_cnt": "BIGINT",
+    "ad_ctr": "DOUBLE",
+    "ad_revenue": "DECIMAL(18,2)",
+    "dt": "STRING"
+   },
+   "source": "12_dws_ads_ext.sql",
+   "name_cn": "收入日粒度汇总",
+   "grain": "天",
+   "pk": [
+    "dt"
+   ],
+   "rows": 35,
+   "catalog": "hive_catalog",
+   "database": "music_dw",
+   "caveats": [
+    "arpu 字段名与口径不符，实为 ARPPU（净收入/付费用户数），见 glossary.traps.arpu_misnamed",
+    "金额列全部 DECIMAL(18,2)"
+   ],
+   "pk_unique": true,
+   "versions": "none"
+  },
+  "ads_funnel": {
+   "layer": "ads",
+   "partitioned_by": [
+    "dt"
+   ],
+   "columns": [
+    "impression_cnt",
+    "click_cnt",
+    "ctr",
+    "play_start_cnt",
+    "click_to_play_rate",
+    "complete_cnt",
+    "complete_rate",
+    "interact_cnt",
+    "interact_rate",
+    "pay_cnt",
+    "pay_conv_rate",
+    "pay_cnt_dod",
+    "dt"
+   ],
+   "types": {
+    "impression_cnt": "BIGINT",
+    "click_cnt": "BIGINT",
+    "ctr": "DOUBLE",
+    "play_start_cnt": "BIGINT",
+    "click_to_play_rate": "DOUBLE",
+    "complete_cnt": "BIGINT",
+    "complete_rate": "DOUBLE",
+    "interact_cnt": "BIGINT",
+    "interact_rate": "DOUBLE",
+    "pay_cnt": "BIGINT",
+    "pay_conv_rate": "DOUBLE",
+    "pay_cnt_dod": "DOUBLE",
+    "dt": "STRING"
+   },
+   "source": "12_dws_ads_ext.sql",
+   "name_cn": "六层漏斗",
+   "grain": "天",
+   "pk": [
+    "dt"
+   ],
+   "rows": 35,
+   "catalog": "hive_catalog",
+   "database": "music_dw",
+   "caveats": [
+    "pay_cnt 含订阅+下单，不含退款",
+    "pay_cnt_dod 是日环比，第一天为 NULL",
+    "中间两层（ctr / click_to_play_rate）无方差，做趋势分析没有信息量"
+   ],
+   "pk_unique": true,
+   "versions": "none"
+  },
+  "ads_revenue": {
+   "layer": "ads",
+   "partitioned_by": [
+    "dt"
+   ],
+   "columns": [
+    "gross_revenue",
+    "refund_amount",
+    "net_revenue",
+    "ad_revenue",
+    "pay_user_cnt",
+    "arpu",
+    "refund_rate",
+    "ad_ctr",
+    "net_revenue_dod",
+    "cum_net_revenue",
+    "dt"
+   ],
+   "types": {
+    "gross_revenue": "DECIMAL(18,2)",
+    "refund_amount": "DECIMAL(18,2)",
+    "net_revenue": "DECIMAL(18,2)",
+    "ad_revenue": "DECIMAL(18,2)",
+    "pay_user_cnt": "BIGINT",
+    "arpu": "DECIMAL(18,2)",
+    "refund_rate": "DOUBLE",
+    "ad_ctr": "DOUBLE",
+    "net_revenue_dod": "DOUBLE",
+    "cum_net_revenue": "DECIMAL(18,2)",
+    "dt": "STRING"
+   },
+   "source": "12_dws_ads_ext.sql",
+   "name_cn": "收入报表",
+   "grain": "天",
+   "pk": [
+    "dt"
+   ],
+   "rows": 35,
+   "catalog": "hive_catalog",
+   "database": "music_dw",
+   "caveats": [
+    "arpu 字段实为 ARPPU，见 glossary.traps.arpu_misnamed",
+    "cum_net_revenue 是累计值，最后一行的值才是全窗口净收入",
+    "net_revenue = gross_revenue - refund_amount，三个字段不要重复相加"
+   ],
+   "pk_unique": true,
+   "versions": "none"
+  },
+  "dev_province_revenue_daily": {
+   "layer": "dev",
+   "partitioned_by": [],
+   "columns": [
+    "province",
+    "dt",
+    "pay_order_cnt",
+    "net_revenue"
+   ],
+   "types": {
+    "province": "STRING",
+    "dt": "STRING",
+    "pay_order_cnt": "BIGINT",
+    "net_revenue": "DECIMAL(18,2)"
+   },
+   "source": "15_dev_tables.sql",
+   "name_cn": "省份×日收入净额（工程师开发表）",
+   "grain": "省 × 天",
+   "pk": [
+    "dt",
+    "province"
+   ],
+   "rows": 1078,
+   "catalog": "hive_catalog",
+   "database": "music_dw",
+   "caveats": [
+    "net_revenue 与 revenue_sum 指标口径逐分对齐（含 vip_subscribe、退款取负），35 天合计 823,410 = ads_revenue.net_revenue 合计",
+    "数据截至 2026-11-08；dwd_pay 支付类事件最早出现在 2026-10-05",
+    "由 Agent ETL 流程生成、etlguard 校验、人工复核口径后执行（2026-11-11）；源表更新后需重跑 CTAS 刷新本表"
+   ],
+   "pk_unique": true,
+   "versions": "none"
+  },
+  "dev_province_daily_top20_user": {
+   "layer": "dev",
+   "partitioned_by": [],
+   "columns": [
+    "province",
+    "dt",
+    "user_id",
+    "gross_revenue",
+    "rn"
+   ],
+   "types": {
+    "province": "STRING",
+    "dt": "STRING",
+    "user_id": "STRING",
+    "gross_revenue": "DECIMAL(28, 2)",
+    "rn": "INT"
+   },
+   "source": "15_dev_tables.sql",
+   "name_cn": "分省每日消费金额Top20用户",
+   "grain": "天 × province × user_id",
+   "pk": [
+    "dt",
+    "province",
+    "user_id"
+   ],
+   "rows": 17178,
+   "catalog": "hive_catalog",
+   "database": "music_dw",
+   "caveats": [
+    "由 Agent ETL 流程生成、etlguard 校验、执行后回读（2026-11-11，17178 行）",
+    "数据窗口 2026-10-05 ~ 2026-11-08；源表更新后由每日调度脚本重刷",
+    "业务口径来源：统计每个省份每日消费金额的top20用户，并且每天要自动更新",
+    "列结构由执行后 DESCRIBE 实测生成；口径若要成为命名指标，需在 metrics.yaml 补指标定义（会进入口径评测）"
+   ],
+   "pk_unique": true,
+   "versions": "none"
+  },
+  "ops_data_quality": {
+   "layer": "rt",
+   "partitioned_by": [
+    "stat_minute"
+   ],
+   "columns": [
+    "stat_minute",
+    "events_1m",
+    "errors_1m",
+    "error_rate",
+    "top_rule",
+    "top_rule_cnt",
+    "updated_at"
+   ],
+   "types": {
+    "stat_minute": "DATETIME",
+    "events_1m": "BIGINT",
+    "errors_1m": "BIGINT",
+    "error_rate": "DOUBLE",
+    "top_rule": "VARCHAR(64)",
+    "top_rule_cnt": "BIGINT",
+    "updated_at": "DATETIME"
+   },
+   "source": "realtime.yaml",
+   "catalog": "internal",
+   "database": "music_dw",
+   "name_cn": "实时埋点分钟级质量",
+   "grain": "分钟",
+   "rows": 1043,
+   "time_col": "stat_minute",
+   "alt_time_col": "",
+   "caveats": [
+    "error_rate 是比率型字段，不能跨分钟直接 AVG（R8 会拦）",
+    "每分钟一行；问某一天的错误率要用 SUM(errors_1m)/SUM(events_1m)"
+   ],
+   "pk_unique": false
+  },
+  "ops_pipeline_latency": {
+   "layer": "rt",
+   "partitioned_by": [
+    "stat_minute"
+   ],
+   "columns": [
+    "stat_minute",
+    "ods_lag_s",
+    "dwd_lag_s",
+    "dws_lag_s",
+    "ads_lag_s",
+    "input_rate",
+    "dwd_rows_1m",
+    "kafka_lag_rows",
+    "updated_at"
+   ],
+   "types": {
+    "stat_minute": "DATETIME",
+    "ods_lag_s": "INT",
+    "dwd_lag_s": "INT",
+    "dws_lag_s": "INT",
+    "ads_lag_s": "INT",
+    "input_rate": "DOUBLE",
+    "dwd_rows_1m": "BIGINT",
+    "kafka_lag_rows": "BIGINT",
+    "updated_at": "DATETIME"
+   },
+   "source": "realtime.yaml",
+   "catalog": "internal",
+   "database": "music_dw",
+   "name_cn": "实时链路分钟级延迟",
+   "grain": "分钟",
+   "rows": 1043,
+   "time_col": "stat_minute",
+   "alt_time_col": "",
+   "caveats": [
+    "lag 单位是秒；*_lag_s 是各层相对事件时间的端到端延迟",
+    "kafka_lag_rows 是积压行数，与延迟不是同一个指标"
+   ],
+   "pk_unique": false
+  },
+  "ops_job_health": {
+   "layer": "rt",
+   "partitioned_by": [
+    "stat_minute"
+   ],
+   "columns": [
+    "stat_minute",
+    "job_name",
+    "job_id",
+    "state",
+    "run_seconds",
+    "ckpt_size_mb",
+    "ckpt_age_s",
+    "ckpt_failed",
+    "updated_at"
+   ],
+   "types": {
+    "stat_minute": "DATETIME",
+    "job_name": "VARCHAR(64)",
+    "job_id": "VARCHAR(64)",
+    "state": "VARCHAR(16)",
+    "run_seconds": "BIGINT",
+    "ckpt_size_mb": "DOUBLE",
+    "ckpt_age_s": "INT",
+    "ckpt_failed": "INT",
+    "updated_at": "DATETIME"
+   },
+   "source": "realtime.yaml",
+   "catalog": "internal",
+   "database": "music_dw",
+   "name_cn": "Flink 作业分钟级健康",
+   "grain": "分钟 × 作业",
+   "rows": 4172,
+   "time_col": "stat_minute",
+   "alt_time_col": "",
+   "caveats": [
+    "一个分钟可能有多个 job，按 job_name 分组，不要直接 SUM(run_seconds)"
+   ],
+   "pk_unique": false
+  },
+  "ads_client_quality_1min": {
+   "layer": "rt",
+   "partitioned_by": [
+    "stat_minute"
+   ],
+   "columns": [
+    "stat_minute",
+    "play_cnt",
+    "error_cnt",
+    "error_rate",
+    "top_error_code",
+    "top_error_cnt",
+    "updated_at"
+   ],
+   "types": {
+    "stat_minute": "DATETIME",
+    "play_cnt": "BIGINT",
+    "error_cnt": "BIGINT",
+    "error_rate": "DOUBLE",
+    "top_error_code": "VARCHAR(16)",
+    "top_error_cnt": "BIGINT",
+    "updated_at": "DATETIME"
+   },
+   "source": "realtime.yaml",
+   "catalog": "internal",
+   "database": "music_dw",
+   "name_cn": "客户端分钟级播放质量",
+   "grain": "分钟",
+   "rows": 633,
+   "time_col": "stat_minute",
+   "alt_time_col": "",
+   "caveats": [
+    "与 ops_data_quality 的区别：这张看客户端播放错误，那张看埋点规则校验"
+   ],
+   "pk_unique": false
+  },
+  "ads_session_1min": {
+   "layer": "rt",
+   "partitioned_by": [
+    "stat_minute"
+   ],
+   "columns": [
+    "stat_minute",
+    "session_cnt",
+    "avg_evts_per_sess",
+    "bounce_sess_cnt",
+    "bounce_rate",
+    "updated_at"
+   ],
+   "types": {
+    "stat_minute": "DATETIME",
+    "session_cnt": "BIGINT",
+    "avg_evts_per_sess": "DOUBLE",
+    "bounce_sess_cnt": "BIGINT",
+    "bounce_rate": "DOUBLE",
+    "updated_at": "DATETIME"
+   },
+   "source": "realtime.yaml",
+   "catalog": "internal",
+   "database": "music_dw",
+   "name_cn": "分钟级会话与跳出",
+   "grain": "分钟",
+   "rows": 645,
+   "time_col": "stat_minute",
+   "alt_time_col": "",
+   "caveats": [
+    "这里的 session 是实时链路按 30 分钟不活动切分，与离线 dwd_session 口径不同"
+   ],
+   "pk_unique": false
+  },
+  "ads_song_rank_10min": {
+   "layer": "rt",
+   "partitioned_by": [
+    "window_start"
+   ],
+   "columns": [
+    "window_start",
+    "rank_no",
+    "song_id",
+    "play_cnt",
+    "uv",
+    "skip_rate",
+    "updated_at"
+   ],
+   "types": {
+    "window_start": "DATETIME",
+    "rank_no": "INT",
+    "song_id": "VARCHAR(32)",
+    "play_cnt": "BIGINT",
+    "uv": "BIGINT",
+    "skip_rate": "DOUBLE",
+    "updated_at": "DATETIME"
+   },
+   "source": "realtime.yaml",
+   "catalog": "internal",
+   "database": "music_dw",
+   "name_cn": "10 分钟歌曲榜",
+   "grain": "10 分钟 × 歌曲 × 名次",
+   "rows": 8153,
+   "time_col": "window_start",
+   "alt_time_col": "",
+   "caveats": [
+    "窗口列是 window_start 不是 stat_minute；一个窗口里每首歌一行",
+    "只能和同窗口的表比名次，不能与离线 ads_song_ranking 直接比"
+   ],
+   "pk_unique": false
+  },
+  "ads_province_10min": {
+   "layer": "rt",
+   "partitioned_by": [
+    "window_start"
+   ],
+   "columns": [
+    "window_start",
+    "province",
+    "play_cnt",
+    "uv",
+    "play_share",
+    "updated_at"
+   ],
+   "types": {
+    "window_start": "DATETIME",
+    "province": "VARCHAR(32)",
+    "play_cnt": "BIGINT",
+    "uv": "BIGINT",
+    "play_share": "DOUBLE",
+    "updated_at": "DATETIME"
+   },
+   "source": "realtime.yaml",
+   "catalog": "internal",
+   "database": "music_dw",
+   "name_cn": "10 分钟省份播放分布",
+   "grain": "10 分钟 × 省份",
+   "rows": 7842,
+   "time_col": "window_start",
+   "alt_time_col": "",
+   "caveats": [
+    "play_share 是窗口内占比，跨窗口求和没有意义"
+   ],
+   "pk_unique": false
+  },
+  "ads_realtime_overview": {
+   "layer": "rt",
+   "partitioned_by": [
+    "stat_date"
+   ],
+   "columns": [
+    "stat_date",
+    "total_play",
+    "total_uv",
+    "login_uv",
+    "finish_rate",
+    "skip_rate",
+    "avg_play_duration",
+    "active_minutes",
+    "last_event_ts",
+    "updated_at"
+   ],
+   "types": {
+    "stat_date": "DATE",
+    "total_play": "BIGINT",
+    "total_uv": "BIGINT",
+    "login_uv": "BIGINT",
+    "finish_rate": "DOUBLE",
+    "skip_rate": "DOUBLE",
+    "avg_play_duration": "DOUBLE",
+    "active_minutes": "INT",
+    "last_event_ts": "DATETIME",
+    "updated_at": "DATETIME"
+   },
+   "source": "realtime.yaml",
+   "catalog": "internal",
+   "database": "music_dw",
+   "name_cn": "实时链路日级总览",
+   "grain": "天",
+   "rows": 3,
+   "time_col": "stat_date",
+   "alt_time_col": "",
+   "caveats": [
+    "只有 3 天（11-06~11-08）；与离线 ads_daily_overview 口径不同，不要混用",
+    "last_event_ts 是快照里最后一个事件时间，可用来判断链路何时停的"
+   ],
+   "pk_unique": false
+  },
+  "dwd_quality_error": {
+   "layer": "rt",
+   "partitioned_by": [
+    "dt"
+   ],
+   "columns": [
+    "event_id",
+    "rule_name",
+    "event_name",
+    "rule_level",
+    "detail",
+    "song_id",
+    "user_id",
+    "device_id",
+    "event_ts",
+    "raw_properties",
+    "etl_time",
+    "dt"
+   ],
+   "types": {
+    "event_id": "VARCHAR(64)",
+    "rule_name": "VARCHAR(64)",
+    "event_name": "VARCHAR(32)",
+    "rule_level": "VARCHAR(16)",
+    "detail": "VARCHAR(512)",
+    "song_id": "VARCHAR(32)",
+    "user_id": "VARCHAR(32)",
+    "device_id": "VARCHAR(32)",
+    "event_ts": "DATETIME",
+    "raw_properties": "TEXT",
+    "etl_time": "DATETIME",
+    "dt": "DATE"
+   },
+   "source": "realtime.yaml",
+   "catalog": "internal",
+   "database": "music_dw",
+   "name_cn": "实时质检异常明细",
+   "grain": "每条异常事件",
+   "rows": 15349,
+   "time_col": "dt",
+   "alt_time_col": "event_ts",
+   "caveats": [
+    "异常明细含 user_id/device_id，产品经理角色会被列级策略拦下（不是 bug）",
+    "rule_name 对应实时校验规则；按规则聚合能看出哪种异常最多"
+   ],
+   "pk_unique": false
+  }
+ },
+ "weighted_columns": [
+  "ad_ctr",
+  "arpu",
+  "avg_play_per_user",
+  "avg_progress",
+  "click_to_play_rate",
+  "complete_rate",
+  "ctr",
+  "incomplete_rate",
+  "interact_rate",
+  "net_revenue_dod",
+  "pay_cnt_dod",
+  "pay_conv_rate",
+  "refund_rate",
+  "retention_rate",
+  "search_click_rate",
+  "zero_result_rate"
+ ],
+ "count": 42,
+ "pk_non_unique": [
+  "dim_user",
+  "ods_user_change"
+ ],
+ "scd2_tables": [
+  "dim_user"
+ ],
+ "versioned_tables": [
+  "dim_user",
+  "ods_user_change"
+ ],
+ "relationships": [
+  {
+   "from": "dwd_play_start",
+   "to": "dim_song",
+   "join_on": "dwd_play_start.song_id = dim_song.song_id",
+   "cardinality": "N:1",
+   "converge": null,
+   "fanout_if_missing": false,
+   "name": "fact_to_song"
+  },
+  {
+   "from": "dwd_play_end",
+   "to": "dim_song",
+   "join_on": "dwd_play_end.song_id = dim_song.song_id",
+   "cardinality": "N:1",
+   "converge": null,
+   "fanout_if_missing": false,
+   "name": "fact_to_song"
+  },
+  {
+   "from": "dwd_skip",
+   "to": "dim_song",
+   "join_on": "dwd_skip.song_id = dim_song.song_id",
+   "cardinality": "N:1",
+   "converge": null,
+   "fanout_if_missing": false,
+   "name": "fact_to_song"
+  },
+  {
+   "from": "dwd_impression",
+   "to": "dim_song",
+   "join_on": "dwd_impression.song_id = dim_song.song_id",
+   "cardinality": "N:1",
+   "converge": null,
+   "fanout_if_missing": false,
+   "name": "fact_to_song"
+  },
+  {
+   "from": "dwd_click",
+   "to": "dim_song",
+   "join_on": "dwd_click.song_id = dim_song.song_id",
+   "cardinality": "N:1",
+   "converge": null,
+   "fanout_if_missing": false,
+   "name": "fact_to_song"
+  },
+  {
+   "from": "dwd_play_control",
+   "to": "dim_song",
+   "join_on": "dwd_play_control.song_id = dim_song.song_id",
+   "cardinality": "N:1",
+   "converge": null,
+   "fanout_if_missing": false,
+   "name": "fact_to_song"
+  },
+  {
+   "from": "dwd_interaction",
+   "to": "dim_song",
+   "join_on": "dwd_interaction.song_id = dim_song.song_id",
+   "cardinality": "N:1",
+   "converge": null,
+   "fanout_if_missing": false,
+   "name": "fact_to_song"
+  },
+  {
+   "from": "dws_song_play_daily",
+   "to": "dim_song",
+   "join_on": "dws_song_play_daily.song_id = dim_song.song_id",
+   "cardinality": "N:1",
+   "converge": null,
+   "fanout_if_missing": false,
+   "name": "fact_to_song"
+  },
+  {
+   "from": "ads_song_ranking",
+   "to": "dim_song",
+   "join_on": "ads_song_ranking.song_id = dim_song.song_id",
+   "cardinality": "N:1",
+   "converge": null,
+   "fanout_if_missing": false,
+   "name": "fact_to_song"
+  },
+  {
+   "from": "dwd_play_start",
+   "to": "dim_user",
+   "join_on": "dwd_play_start.user_id = dim_user.user_id",
+   "cardinality": "N:1",
+   "converge": "dim_user.is_current = 'Y'",
+   "fanout_if_missing": true,
+   "name": "fact_to_user"
+  },
+  {
+   "from": "dwd_play_end",
+   "to": "dim_user",
+   "join_on": "dwd_play_end.user_id = dim_user.user_id",
+   "cardinality": "N:1",
+   "converge": "dim_user.is_current = 'Y'",
+   "fanout_if_missing": true,
+   "name": "fact_to_user"
+  },
+  {
+   "from": "dwd_skip",
+   "to": "dim_user",
+   "join_on": "dwd_skip.user_id = dim_user.user_id",
+   "cardinality": "N:1",
+   "converge": "dim_user.is_current = 'Y'",
+   "fanout_if_missing": true,
+   "name": "fact_to_user"
+  },
+  {
+   "from": "dwd_impression",
+   "to": "dim_user",
+   "join_on": "dwd_impression.user_id = dim_user.user_id",
+   "cardinality": "N:1",
+   "converge": "dim_user.is_current = 'Y'",
+   "fanout_if_missing": true,
+   "name": "fact_to_user"
+  },
+  {
+   "from": "dwd_click",
+   "to": "dim_user",
+   "join_on": "dwd_click.user_id = dim_user.user_id",
+   "cardinality": "N:1",
+   "converge": "dim_user.is_current = 'Y'",
+   "fanout_if_missing": true,
+   "name": "fact_to_user"
+  },
+  {
+   "from": "dwd_play_control",
+   "to": "dim_user",
+   "join_on": "dwd_play_control.user_id = dim_user.user_id",
+   "cardinality": "N:1",
+   "converge": "dim_user.is_current = 'Y'",
+   "fanout_if_missing": true,
+   "name": "fact_to_user"
+  },
+  {
+   "from": "dwd_interaction",
+   "to": "dim_user",
+   "join_on": "dwd_interaction.user_id = dim_user.user_id",
+   "cardinality": "N:1",
+   "converge": "dim_user.is_current = 'Y'",
+   "fanout_if_missing": true,
+   "name": "fact_to_user"
+  },
+  {
+   "from": "dwd_search",
+   "to": "dim_user",
+   "join_on": "dwd_search.user_id = dim_user.user_id",
+   "cardinality": "N:1",
+   "converge": "dim_user.is_current = 'Y'",
+   "fanout_if_missing": true,
+   "name": "fact_to_user"
+  },
+  {
+   "from": "dwd_ad",
+   "to": "dim_user",
+   "join_on": "dwd_ad.user_id = dim_user.user_id",
+   "cardinality": "N:1",
+   "converge": "dim_user.is_current = 'Y'",
+   "fanout_if_missing": true,
+   "name": "fact_to_user"
+  },
+  {
+   "from": "dwd_page_view",
+   "to": "dim_user",
+   "join_on": "dwd_page_view.user_id = dim_user.user_id",
+   "cardinality": "N:1",
+   "converge": "dim_user.is_current = 'Y'",
+   "fanout_if_missing": true,
+   "name": "fact_to_user"
+  },
+  {
+   "from": "dwd_session",
+   "to": "dim_user",
+   "join_on": "dwd_session.user_id = dim_user.user_id",
+   "cardinality": "N:1",
+   "converge": "dim_user.is_current = 'Y'",
+   "fanout_if_missing": true,
+   "name": "fact_to_user"
+  },
+  {
+   "from": "dwd_pay",
+   "to": "dim_user",
+   "join_on": "dwd_pay.user_id = dim_user.user_id",
+   "cardinality": "N:1",
+   "converge": "dim_user.is_current = 'Y'",
+   "fanout_if_missing": true,
+   "name": "fact_to_user"
+  },
+  {
+   "from": "ods_music_event",
+   "to": "dim_user",
+   "join_on": "ods_music_event.user_id = dim_user.user_id",
+   "cardinality": "N:1",
+   "converge": "dim_user.is_current = 'Y'",
+   "fanout_if_missing": true,
+   "name": "fact_to_user"
+  },
+  {
+   "from": "ods_user_change",
+   "to": "dim_user",
+   "join_on": "ods_user_change.user_id = dim_user.user_id",
+   "cardinality": "N:1",
+   "converge": "dim_user.is_current = 'Y'",
+   "fanout_if_missing": true,
+   "name": "fact_to_user"
+  }
+ ],
+ "column_additivity": {
+  "ad_ctr": "none",
+  "arpu": "none",
+  "avg_evts_per_sess": "none",
+  "avg_play_duration": "none",
+  "avg_play_per_user": "none",
+  "avg_progress": "none",
+  "avg_result_cnt": "none",
+  "avg_sess_per_user": "none",
+  "bounce_rate": "none",
+  "click_to_play_rate": "none",
+  "complete_rate": "none",
+  "ctr": "none",
+  "dau": "semi",
+  "error_rate": "none",
+  "finish_rate": "none",
+  "incomplete_rate": "none",
+  "input_rate": "none",
+  "interact_rate": "none",
+  "login_user_cnt": "stock",
+  "login_uv": "semi",
+  "net_revenue_dod": "none",
+  "pay_cnt_dod": "none",
+  "pay_conv_rate": "none",
+  "pay_user_cnt": "semi",
+  "play_share": "none",
+  "refund_rate": "none",
+  "retention_rate": "none",
+  "search_click_rate": "none",
+  "search_uv": "semi",
+  "skip_rate": "none",
+  "total_uv": "semi",
+  "user_cnt": "semi",
+  "vip_user_cnt": "stock",
+  "zero_result_rate": "none"
+ },
+ "caliber_guard": [
+  {
+   "id": "C1",
+   "kind": "event_coverage",
+   "level": "WARN",
+   "rule": "R25-口径-收入事件",
+   "table": "dwd_pay",
+   "agg_column": "amount",
+   "require_events": [
+    "vip_subscribe",
+    "order_pay"
+   ],
+   "title": "收入金额必须覆盖 VIP 订阅",
+   "why": "35 天里 VIP 订阅 713,349、普通支付 156,986；只取 order_pay 会算出 156,986，比真值 823,410 低 5.24 倍",
+   "hint": "改为 SUM(CASE WHEN event_name IN ('vip_subscribe','order_pay') THEN amount ELSE 0 END)；净收入再按 C2 减退款",
+   "replacement": "SUM(CASE WHEN event_name IN ('vip_subscribe','order_pay') THEN amount ELSE 0 END)"
+  },
+  {
+   "id": "C2",
+   "kind": "refund_sign",
+   "level": "WARN",
+   "rule": "R25-口径-退款符号",
+   "table": "dwd_pay",
+   "agg_column": "amount",
+   "refund_event": "order_refund",
+   "title": "退款必须取负或显式排除",
+   "why": "退款与收入同表且 amount 是正数；按正数相加等于把退款当收入，35 天退款 46,925（占毛收入 5.4%）",
+   "hint": "净额：WHEN event_name = 'order_refund' THEN -amount；流水：显式只保留 vip_subscribe / order_pay",
+   "replacement": "SUM(CASE WHEN event_name IN ('vip_subscribe','order_pay') THEN amount WHEN event_name = 'order_refund' THEN -amount ELSE 0 END)"
+  },
+  {
+   "id": "C3",
+   "kind": "source_guard",
+   "level": "WARN",
+   "rule": "R25-口径-UV 源表",
+   "table": "dwd_play_start",
+   "right_table": "dwd_session",
+   "agg_columns": [
+    "user_id",
+    "device_id"
+   ],
+   "title": "活跃用户必须用启动口径",
+   "why": "2026-11-09 实测 11-08 启动口径 3,237 人、播放口径 2,525 人，差 22%，差额是启动了但没播的人",
+   "hint": "改用 dwd_session（event_name = 'app_launch'）；只算播放用户请另立 play_uv 指标，不要顶替 DAU",
+   "replacement": "dwd_session"
+  },
+  {
+   "id": "C4",
+   "kind": "denominator",
+   "level": "REJECT",
+   "rule": "R25-口径-完播率分母",
+   "table": "dwd_play_end",
+   "right_table": "dwd_play_start",
+   "indicator": "complete_rate",
+   "right_denominator": "play_start_cnt",
+   "title": "完播率分母必须是起播数",
+   "why": "分母用 dwd_play_end 的 COUNT(*)（312,083 行）会算出 0.7341；真值 complete_cnt/play_start_cnt = 229,038/445,945 = 0.5143。promptlib 两条硬提示仍挡不住（2026-11-14 实测 5 次错 1 次）",
+   "hint": "分子分母各自在自己的来源表上独立聚合成标量子查询再相除：分子是 dwd_play_end 里 play_progress>=0.9 的行数，分母是 dwd_play_start 的起播数",
+   "fix_template": "(SELECT COUNT(*) FROM dwd_play_start WHERE dt = '{dt}')"
+  },
+  {
+   "id": "C5",
+   "kind": "dedup_entity",
+   "level": "REJECT",
+   "rule": "R25-口径-用户占比分母",
+   "table": "dwd_pay",
+   "right_table": "dws_user_daily",
+   "indicator": "ratio",
+   "title": "用户占比分母必须是去重人数",
+   "why": "dwd_pay 一行是一笔支付；SUM(is_vip='true')/COUNT(*) = 99/1,046 = 0.0946 是笔数占比，真值 vip_user_cnt/dau = 317/3,237 = 0.0979（2026-11-08）",
+   "hint": "改用 dws_user_daily 的 vip_user_cnt / dau（语义层已有 vip_user_ratio 指标），不要从支付明细按行计数",
+   "replacement": "SELECT vip_user_cnt / NULLIF(dau, 0) AS vip_ratio FROM dws_user_daily WHERE dt = '<当日>'"
+  },
+  {
+   "id": "C6",
+   "kind": "ratio_consistency",
+   "level": "REJECT",
+   "rule": "R25-口径-占比分子分母同源",
+   "table": "ads_province_dist",
+   "tables": [
+    "ads_province_dist",
+    "dws_province_daily"
+   ],
+   "indicator": "ratio",
+   "title": "省份占比的分子分母必须同列同源",
+   "why": "2026-11-15 实测 C15：MAX(province_play)/SUM(play_start_cnt) 分子取自按省聚合子查询、分母另起 CROSS JOIN 取另一层的列，算出 0.0029；真值 MAX(province_play)/SUM(province_play) = 1150/12710 = 0.0905",
+   "hint": "占比的分子与分母用同一列：按省聚合后 MAX(province_play)/SUM(province_play)，或直接在省份表上 MAX(play_start_cnt)/SUM(play_start_cnt)；不要让分子分母各自来自不同的子查询层",
+   "replacement": "SELECT MAX(province_play) / NULLIF(SUM(province_play), 0) AS ratio FROM (SELECT province, SUM(play_start_cnt) AS province_play FROM dws_province_daily WHERE dt = '<当日>' GROUP BY province) t"
+  }
+ ],
+ "curated_at": "2026-11-09",
+ "realtime": {
+  "lane": "rt",
+  "catalog": "internal",
+  "database": "music_dw",
+  "status": "down",
+  "data_since": "2026-11-02 16:32",
+  "data_until": "2026-11-08 22:17",
+  "freshness_note": "实时链路历史快照，窗口 2026-11-02 16:32 ~ 2026-11-08 22:17；链路已停止产出，不代表当前时刻",
+  "default_time_col": "stat_minute",
+  "tables": {
+   "ops_data_quality": {
+    "time_col": "stat_minute",
+    "alt_time_col": "",
+    "grain": "分钟",
+    "rows": 1043,
+    "name_cn": "实时埋点分钟级质量"
+   },
+   "ops_pipeline_latency": {
+    "time_col": "stat_minute",
+    "alt_time_col": "",
+    "grain": "分钟",
+    "rows": 1043,
+    "name_cn": "实时链路分钟级延迟"
+   },
+   "ops_job_health": {
+    "time_col": "stat_minute",
+    "alt_time_col": "",
+    "grain": "分钟 × 作业",
+    "rows": 4172,
+    "name_cn": "Flink 作业分钟级健康"
+   },
+   "ads_client_quality_1min": {
+    "time_col": "stat_minute",
+    "alt_time_col": "",
+    "grain": "分钟",
+    "rows": 633,
+    "name_cn": "客户端分钟级播放质量"
+   },
+   "ads_session_1min": {
+    "time_col": "stat_minute",
+    "alt_time_col": "",
+    "grain": "分钟",
+    "rows": 645,
+    "name_cn": "分钟级会话与跳出"
+   },
+   "ads_song_rank_10min": {
+    "time_col": "window_start",
+    "alt_time_col": "",
+    "grain": "10 分钟 × 歌曲 × 名次",
+    "rows": 8153,
+    "name_cn": "10 分钟歌曲榜"
+   },
+   "ads_province_10min": {
+    "time_col": "window_start",
+    "alt_time_col": "",
+    "grain": "10 分钟 × 省份",
+    "rows": 7842,
+    "name_cn": "10 分钟省份播放分布"
+   },
+   "ads_realtime_overview": {
+    "time_col": "stat_date",
+    "alt_time_col": "",
+    "grain": "天",
+    "rows": 3,
+    "name_cn": "实时链路日级总览"
+   },
+   "dwd_quality_error": {
+    "time_col": "dt",
+    "alt_time_col": "event_ts",
+    "grain": "每条异常事件",
+    "rows": 15349,
+    "name_cn": "实时质检异常明细"
+   }
+  }
+ }
+}

@@ -1,0 +1,180 @@
+{
+ "intents": [
+  {
+   "intent": "单表指标",
+   "n": 19,
+   "domains": [
+    "互动",
+    "内容消费",
+    "商业化",
+    "用户增长"
+   ],
+   "need": 8,
+   "need_domains": 3,
+   "ok": true,
+   "gap": 0,
+   "gap_domains": 0
+  },
+  {
+   "intent": "分布",
+   "n": 5,
+   "domains": [
+    "内容消费",
+    "用户增长"
+   ],
+   "need": 5,
+   "need_domains": 2,
+   "ok": true,
+   "gap": 0,
+   "gap_domains": 0
+  },
+  {
+   "intent": "对比",
+   "n": 10,
+   "domains": [
+    "互动",
+    "内容消费",
+    "商业化",
+    "用户增长"
+   ],
+   "need": 5,
+   "need_domains": 2,
+   "ok": true,
+   "gap": 0,
+   "gap_domains": 0
+  },
+  {
+   "intent": "趋势",
+   "n": 5,
+   "domains": [
+    "商业化",
+    "时间语义",
+    "用户增长"
+   ],
+   "need": 5,
+   "need_domains": 2,
+   "ok": true,
+   "gap": 0,
+   "gap_domains": 0
+  },
+  {
+   "intent": "排名",
+   "n": 5,
+   "domains": [
+    "内容消费",
+    "商业化",
+    "用户增长"
+   ],
+   "need": 5,
+   "need_domains": 2,
+   "ok": true,
+   "gap": 0,
+   "gap_domains": 0
+  },
+  {
+   "intent": "归因",
+   "n": 5,
+   "domains": [
+    "内容消费",
+    "商业化"
+   ],
+   "need": 5,
+   "need_domains": 2,
+   "ok": true,
+   "gap": 0,
+   "gap_domains": 0
+  },
+  {
+   "intent": "多表JOIN",
+   "n": 6,
+   "domains": [
+    "互动",
+    "内容消费"
+   ],
+   "need": 5,
+   "need_domains": 2,
+   "ok": true,
+   "gap": 0,
+   "gap_domains": 0
+  },
+  {
+   "intent": "占比",
+   "n": 5,
+   "domains": [
+    "内容消费",
+    "商业化"
+   ],
+   "need": 5,
+   "need_domains": 2,
+   "ok": true,
+   "gap": 0,
+   "gap_domains": 0
+  },
+  {
+   "intent": "口径歧义",
+   "n": 5,
+   "domains": [
+    "元问题",
+    "用户增长"
+   ],
+   "need": 4,
+   "need_domains": 2,
+   "ok": true,
+   "gap": 0,
+   "gap_domains": 0
+  },
+  {
+   "intent": "时间歧义",
+   "n": 10,
+   "domains": [
+    "时间语义",
+    "边界与安全"
+   ],
+   "need": 5,
+   "need_domains": 2,
+   "ok": true,
+   "gap": 0,
+   "gap_domains": 0
+  },
+  {
+   "intent": "时间比较",
+   "n": 4,
+   "domains": [
+    "商业化",
+    "时间语义"
+   ],
+   "need": 3,
+   "need_domains": 2,
+   "ok": true,
+   "gap": 0,
+   "gap_domains": 0
+  },
+  {
+   "intent": "明细列举",
+   "n": 3,
+   "domains": [
+    "内容消费",
+    "商业化",
+    "用户增长"
+   ],
+   "need": 3,
+   "need_domains": 2,
+   "ok": true,
+   "gap": 0,
+   "gap_domains": 0
+  }
+ ],
+ "cross_cut": [
+  "写操作",
+  "口径解释",
+  "成本闸",
+  "注入对抗",
+  "越权",
+  "闲聊"
+ ],
+ "unknown_intents": [],
+ "cells_ok": 12,
+ "cells_total": 12,
+ "coverage": 100.0,
+ "total_cases": 128
+}
