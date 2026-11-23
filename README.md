@@ -43,17 +43,20 @@ dashboard/         Flask + ECharts 看板
 
 ## 快速开始
 
-环境：Python 3.10+，PostgreSQL（治理库）、Doris（查询面）、Redis（可选，答案缓存）。
+环境：Python 3.10+，PostgreSQL（治理库）、Doris（查询面）、Redis（可选，答案缓存）。**问数和评测前须先起 Doris 与 PG**，否则 execute 节点会连不上库。
 
 ```bash
 pip install -r code/agent/requirements.txt
 
+# 先启动 Doris / PostgreSQL / Redis（Windows 用 start.ps1，Linux 见 eval/ci.sh 的环境检查）
+
 # 初始化治理库（不可变审计表、RBAC、会话表）
-python -c "from governance import store; from conf import load_config; print(store.init_schema(load_config()))"
+python -c "import sys; sys.path[:0]=['code','code/agent']; from governance import store; from conf import load_config; print(store.init_schema(load_config()))"
 
 python code/agent/run.py "2026-11-08 的 DAU 是多少"   # 命令行问一句
 python code/agent/webapp.py --port 8000               # Web 界面
 python eval/run.py --repeat 3 --json eval/last.json   # 128 题 ×3 轮评测
+bash eval/ci.sh --quick                               # 提交前门禁（约 1 分钟）
 ```
 
 Windows 另提供 `setup.ps1` / `start.ps1` / `stop.ps1` 一键脚本。
